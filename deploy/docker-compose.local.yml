@@ -6,11 +6,12 @@
 # the deploy directory.
 #
 # Quick Start:
-#   1. Copy .env.example to .env and configure
-#   2. mkdir -p data postgres_data redis_data
-#   3. docker-compose -f docker-compose.local.yml up -d
-#   4. Check logs: docker-compose -f docker-compose.local.yml logs -f sub2api
-#   5. Access: http://localhost:8080
+#   1. Copy the repository to the server and enter the deploy directory
+#   2. Copy .env.example to .env and configure
+#   3. mkdir -p data postgres_data redis_data
+#   4. docker compose -f docker-compose.local.yml up -d --build
+#   5. Check logs: docker compose -f docker-compose.local.yml logs -f sub2api
+#   6. Access: http://localhost:8080
 #
 # Migration to New Server:
 #   1. docker-compose -f docker-compose.local.yml down
@@ -24,7 +25,10 @@ services:
   # Sub2API Application
   # ===========================================================================
   sub2api:
-    image: weishaw/sub2api:latest
+    image: sub2api:local
+    build:
+      context: ..
+      dockerfile: Dockerfile
     container_name: sub2api
     restart: unless-stopped
     ulimits:
