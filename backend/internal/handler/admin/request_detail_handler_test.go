@@ -43,7 +43,7 @@ func (s *requestDetailRepoStub) StreamAll(context.Context, service.RequestDetail
 func TestRequestDetailHandlerListParsesFilters(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &requestDetailRepoStub{}
-	h := NewRequestDetailHandler(service.NewRequestDetailService(repo))
+	h := NewRequestDetailHandler(service.NewRequestDetailService(repo), nil)
 	r := gin.New()
 	r.GET("/admin/request-details", h.List)
 
