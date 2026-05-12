@@ -59,6 +59,7 @@ func TestRequestDetailCaptureRedactsHeadersAndCapturesResponse(t *testing.T) {
 
 	require.Equal(t, http.StatusAccepted, detail.StatusCode)
 	require.True(t, detail.Success)
+	require.Equal(t, "", detail.ResponseContent)
 	require.Equal(t, `{"id":"resp-1","ok":true}`, detail.ResponseBody)
 	require.Equal(t, `{"model":"gpt-5","messages":[]}`, detail.RequestBody)
 	require.Equal(t, `{"model":"gpt-5","stream":false}`, detail.UpstreamRequestBody)
@@ -114,4 +115,53 @@ func TestRequestDetailCaptureCapturesWriteHeaderWithoutBody(t *testing.T) {
 	require.True(t, detail.Success)
 	require.Equal(t, []string{"***REDACTED***"}, detail.ResponseHeaders["Set-Cookie"])
 	require.Empty(t, detail.ResponseBody)
+}
+
+func TestExtractResponseContent(t *testing.T) {
+	t.Run("openai responses sse", func(t *testing.T) {
+		body := "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Hello\"}\n\n" +
+			"data: {\"type\":\"response.output_text.delta\",\"delta\":\" world\"}\n\n" +
+			"data: {\"type\":\"response.completed\",\"response\":{\"output\":[]}}\n\n" +
+			"data: [DONE]\n\n"
+		got := extractResponseContent(RequestDetailContext{Platform: PlatformOpenAI}, body)
+		require.Equal(t, "Hello world", got)
+	})
+
+	t.Run("openai chat completions sse", func(t *testing.T) {
+		body := "data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\n" +
+			"data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}\n\n" +
+			"data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" world\"},\"finish_reason\":null}]}\n\n" +
+			"data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\"},\"finish_reason\":\"stop\"}]}\n\n" +
+			"data: [DONE]\n\n"
+		got := extractResponseContent(RequestDetailContext{Platform: PlatformOpenAI}, body)
+		require.Equal(t, "Hello world", got)
+	})
+
+	t.Run("anthropic sse", func(t *testing.T) {
+		body := "event: content_block_start\n" +
+			"data: {\"type\":\"content_block_start\",\"content_block\":{\"type\":\"text\",\"text\":\"Hello\"}}\n\n" +
+			"event: content_block_delta\n" +
+			"data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\" world\"}}\n\n" +
+			"event: message_stop\n" +
+			"data: {\"type\":\"message_stop\"}\n\n"
+		got := extractResponseContent(RequestDetailContext{Platform: PlatformAnthropic}, body)
+		require.Equal(t, "Hello world", got)
+	})
+
+	t.Run("anthropic sse on openai messages endpoint", func(t *testing.T) {
+		body := "event: content_block_start\n" +
+			"data: {\"type\":\"content_block_start\",\"content_block\":{\"type\":\"text\",\"text\":\"Hello\"}}\n\n" +
+			"event: content_block_delta\n" +
+			"data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\" world\"}}\n\n" +
+			"event: message_stop\n" +
+			"data: {\"type\":\"message_stop\"}\n\n"
+		got := extractResponseContent(RequestDetailContext{Platform: PlatformOpenAI, Endpoint: "/v1/messages"}, body)
+		require.Equal(t, "Hello world", got)
+	})
+
+	t.Run("gemini json", func(t *testing.T) {
+		body := `{"candidates":[{"content":{"parts":[{"text":"Hello"},{"text":" world"}]}}]}`
+		got := extractResponseContent(RequestDetailContext{Platform: PlatformGemini}, body)
+		require.Equal(t, "Hello world", got)
+	})
 }

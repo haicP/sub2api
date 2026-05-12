@@ -99,6 +99,9 @@ func (RequestDetail) Fields() []ent.Field {
 		field.String("upstream_request_body").
 			Default("").
 			SchemaType(map[string]string{dialect.Postgres: "text"}),
+		field.String("response_content").
+			Default("").
+			SchemaType(map[string]string{dialect.Postgres: "text"}),
 		field.String("response_body").
 			Default("").
 			SchemaType(map[string]string{dialect.Postgres: "text"}),

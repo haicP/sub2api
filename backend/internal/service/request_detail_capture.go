@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 )
 
 const ginContextKeyRequestDetailCapture = "request_detail_capture"
@@ -177,6 +179,7 @@ func (c *RequestDetailCapture) Finish(errorMessage string) *RequestDetail {
 		RequestBody:         c.requestBody,
 		UpstreamRequestBody: c.upstreamRequestBody,
 		ResponseHeaders:     redactHeader(c.responseHeaders),
+		ResponseContent:     extractResponseContent(c.ctx, c.responseBody.String()),
 		ResponseBody:        c.responseBody.String(),
 		ResponseTruncated:   false,
 		ErrorMessage:        errorMessage,
@@ -253,6 +256,217 @@ func cloneHeaderMap(header map[string][]string) map[string][]string {
 	return out
 }
 
+func extractResponseContent(ctx RequestDetailContext, responseBody string) string {
+	body := strings.TrimSpace(responseBody)
+	if body == "" {
+		return ""
+	}
+
+	if text := extractOpenAIResponseContent(body); text != "" {
+		return text
+	}
+
+	if text := extractAnthropicResponseContent(body); text != "" {
+		return text
+	}
+
+	if text := extractGeminiResponseContent(body); text != "" {
+		return text
+	}
+
+	return ""
+}
+
+func ExtractRequestDetailResponseContent(ctx RequestDetailContext, responseBody string) string {
+	return extractResponseContent(ctx, responseBody)
+}
+
+func extractOpenAIResponseContent(body string) string {
+	if strings.Contains(body, "data:") {
+		if text := extractChatCompletionsContentFromSSE(body); text != "" {
+			return text
+		}
+		if outputJSON, ok := reconstructResponseOutputFromSSE(body); ok {
+			return extractTextFromOpenAIOutputJSON(outputJSON)
+		}
+	}
+
+	trimmed := strings.TrimSpace(body)
+	if !gjson.Valid(trimmed) {
+		return ""
+	}
+
+	if output := gjson.Get(trimmed, "output"); output.Exists() {
+		return extractTextFromOpenAIOutputJSON([]byte(output.Raw))
+	}
+	if choices := gjson.Get(trimmed, "choices"); choices.Exists() {
+		return extractTextFromChatChoicesJSON([]byte(choices.Raw))
+	}
+	return ""
+}
+
+func extractChatCompletionsContentFromSSE(body string) string {
+	var texts []string
+	forEachOpenAISSEDataPayload(body, func(data []byte) {
+		if len(data) == 0 || !gjson.ValidBytes(data) {
+			return
+		}
+		choices := gjson.GetBytes(data, "choices")
+		if !choices.Exists() || !choices.IsArray() {
+			return
+		}
+		choices.ForEach(func(_, choice gjson.Result) bool {
+			if text := choice.Get("delta.content").String(); text != "" {
+				texts = append(texts, text)
+			}
+			return true
+		})
+	})
+	return strings.Join(texts, "")
+}
+
+func extractAnthropicResponseContent(body string) string {
+	if strings.Contains(body, "data:") || strings.Contains(body, "event:") {
+		var texts []string
+		lines := strings.Split(body, "\n")
+		for _, line := range lines {
+			payload, ok := extractAnthropicSSEDataLine(line)
+			if !ok {
+				continue
+			}
+			trimmed := strings.TrimSpace(payload)
+			if trimmed == "" || trimmed == "[DONE]" || !gjson.Valid(trimmed) {
+				continue
+			}
+			eventType := gjson.Get(trimmed, "type").String()
+			switch eventType {
+			case "content_block_start":
+				if text := gjson.Get(trimmed, "content_block.text").String(); text != "" {
+					texts = append(texts, text)
+				}
+			case "content_block_delta":
+				if text := gjson.Get(trimmed, "delta.text").String(); text != "" {
+					texts = append(texts, text)
+				}
+			}
+		}
+		return strings.Join(texts, "")
+	}
+
+	trimmed := strings.TrimSpace(body)
+	if !gjson.Valid(trimmed) {
+		return ""
+	}
+	content := gjson.Get(trimmed, "content")
+	if !content.Exists() {
+		return ""
+	}
+	var raw any
+	if err := json.Unmarshal([]byte(content.Raw), &raw); err != nil {
+		return ""
+	}
+	return extractTextFromMixedContent(raw)
+}
+
+func extractGeminiResponseContent(body string) string {
+	trimmed := strings.TrimSpace(body)
+	if !gjson.Valid(trimmed) {
+		return ""
+	}
+
+	candidates := gjson.Get(trimmed, "candidates")
+	if !candidates.Exists() || !candidates.IsArray() {
+		return ""
+	}
+	var texts []string
+	candidates.ForEach(func(_, candidate gjson.Result) bool {
+		parts := candidate.Get("content.parts")
+		if !parts.Exists() || !parts.IsArray() {
+			return true
+		}
+		parts.ForEach(func(_, part gjson.Result) bool {
+			if text := part.Get("text").String(); text != "" {
+				texts = append(texts, text)
+			}
+			return true
+		})
+		return true
+	})
+	return strings.Join(texts, "")
+}
+
+func extractTextFromOpenAIOutputJSON(outputJSON []byte) string {
+	if len(outputJSON) == 0 || !gjson.ValidBytes(outputJSON) {
+		return ""
+	}
+	var output []map[string]any
+	if err := json.Unmarshal(outputJSON, &output); err != nil {
+		return ""
+	}
+	var texts []string
+	for _, item := range output {
+		content, ok := item["content"]
+		if !ok {
+			continue
+		}
+		if text := extractTextFromMixedContent(content); text != "" {
+			texts = append(texts, text)
+		}
+	}
+	return strings.Join(texts, "")
+}
+
+func extractTextFromChatChoicesJSON(choicesJSON []byte) string {
+	if len(choicesJSON) == 0 || !gjson.ValidBytes(choicesJSON) {
+		return ""
+	}
+	var choices []map[string]any
+	if err := json.Unmarshal(choicesJSON, &choices); err != nil {
+		return ""
+	}
+	var texts []string
+	for _, choice := range choices {
+		message, ok := choice["message"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if text := extractTextFromMixedContent(message["content"]); text != "" {
+			texts = append(texts, text)
+		}
+	}
+	return strings.Join(texts, "")
+}
+
+func extractTextFromMixedContent(content any) string {
+	switch v := content.(type) {
+	case string:
+		return v
+	case []any:
+		var texts []string
+		for _, part := range v {
+			m, ok := part.(map[string]any)
+			if !ok {
+				continue
+			}
+			switch t, _ := m["type"].(string); t {
+			case "text", "input_text", "output_text":
+				if text, ok := m["text"].(string); ok {
+					texts = append(texts, text)
+				}
+			}
+		}
+		return strings.Join(texts, "")
+	case []map[string]any:
+		raw := make([]any, 0, len(v))
+		for _, item := range v {
+			raw = append(raw, item)
+		}
+		return extractTextFromMixedContent(raw)
+	default:
+		return ""
+	}
+}
+
 func RequestDetailMiddleware(svc *RequestDetailService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		requestID, _ := c.Request.Context().Value(ctxkey.RequestID).(string)
@@ -262,9 +476,14 @@ func RequestDetailMiddleware(svc *RequestDetailService) gin.HandlerFunc {
 		}
 		capture := NewRequestDetailCapture(c, requestID)
 		PutRequestDetailCapture(c, capture)
-		c.Writer = capture.WrapWriter(c.Writer)
+		originalWriter := c.Writer
+		captureWriter := capture.WrapWriter(c.Writer)
+		c.Writer = captureWriter
 
 		c.Next()
+		if c.Writer == captureWriter {
+			c.Writer = originalWriter
+		}
 
 		detail := capture.Finish(strings.Join(c.Errors.Errors(), "; "))
 		if svc != nil && !svc.Enqueue(detail) {

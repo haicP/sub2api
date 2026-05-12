@@ -1484,16 +1484,20 @@ func init() {
 	requestdetailDescUpstreamRequestBody := requestdetailFields[22].Descriptor()
 	// requestdetail.DefaultUpstreamRequestBody holds the default value on creation for the upstream_request_body field.
 	requestdetail.DefaultUpstreamRequestBody = requestdetailDescUpstreamRequestBody.Default.(string)
+	// requestdetailDescResponseContent is the schema descriptor for response_content field.
+	requestdetailDescResponseContent := requestdetailFields[23].Descriptor()
+	// requestdetail.DefaultResponseContent holds the default value on creation for the response_content field.
+	requestdetail.DefaultResponseContent = requestdetailDescResponseContent.Default.(string)
 	// requestdetailDescResponseBody is the schema descriptor for response_body field.
-	requestdetailDescResponseBody := requestdetailFields[23].Descriptor()
+	requestdetailDescResponseBody := requestdetailFields[24].Descriptor()
 	// requestdetail.DefaultResponseBody holds the default value on creation for the response_body field.
 	requestdetail.DefaultResponseBody = requestdetailDescResponseBody.Default.(string)
 	// requestdetailDescErrorMessage is the schema descriptor for error_message field.
-	requestdetailDescErrorMessage := requestdetailFields[24].Descriptor()
+	requestdetailDescErrorMessage := requestdetailFields[25].Descriptor()
 	// requestdetail.DefaultErrorMessage holds the default value on creation for the error_message field.
 	requestdetail.DefaultErrorMessage = requestdetailDescErrorMessage.Default.(string)
 	// requestdetailDescResponseTruncated is the schema descriptor for response_truncated field.
-	requestdetailDescResponseTruncated := requestdetailFields[25].Descriptor()
+	requestdetailDescResponseTruncated := requestdetailFields[26].Descriptor()
 	// requestdetail.DefaultResponseTruncated holds the default value on creation for the response_truncated field.
 	requestdetail.DefaultResponseTruncated = requestdetailDescResponseTruncated.Default.(bool)
 	securitysecretMixin := schema.SecuritySecret{}.Mixin()

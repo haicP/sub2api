@@ -29699,6 +29699,7 @@ type RequestDetailMutation struct {
 	response_headers      *map[string][]string
 	request_body          *string
 	upstream_request_body *string
+	response_content      *string
 	response_body         *string
 	error_message         *string
 	response_truncated    *bool
@@ -30871,6 +30872,42 @@ func (m *RequestDetailMutation) ResetUpstreamRequestBody() {
 	m.upstream_request_body = nil
 }
 
+// SetResponseContent sets the "response_content" field.
+func (m *RequestDetailMutation) SetResponseContent(s string) {
+	m.response_content = &s
+}
+
+// ResponseContent returns the value of the "response_content" field in the mutation.
+func (m *RequestDetailMutation) ResponseContent() (r string, exists bool) {
+	v := m.response_content
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponseContent returns the old "response_content" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldResponseContent(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponseContent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponseContent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponseContent: %w", err)
+	}
+	return oldValue.ResponseContent, nil
+}
+
+// ResetResponseContent resets all changes to the "response_content" field.
+func (m *RequestDetailMutation) ResetResponseContent() {
+	m.response_content = nil
+}
+
 // SetResponseBody sets the "response_body" field.
 func (m *RequestDetailMutation) SetResponseBody(s string) {
 	m.response_body = &s
@@ -31013,7 +31050,7 @@ func (m *RequestDetailMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RequestDetailMutation) Fields() []string {
-	fields := make([]string, 0, 26)
+	fields := make([]string, 0, 27)
 	if m.request_id != nil {
 		fields = append(fields, requestdetail.FieldRequestID)
 	}
@@ -31083,6 +31120,9 @@ func (m *RequestDetailMutation) Fields() []string {
 	if m.upstream_request_body != nil {
 		fields = append(fields, requestdetail.FieldUpstreamRequestBody)
 	}
+	if m.response_content != nil {
+		fields = append(fields, requestdetail.FieldResponseContent)
+	}
 	if m.response_body != nil {
 		fields = append(fields, requestdetail.FieldResponseBody)
 	}
@@ -31146,6 +31186,8 @@ func (m *RequestDetailMutation) Field(name string) (ent.Value, bool) {
 		return m.RequestBody()
 	case requestdetail.FieldUpstreamRequestBody:
 		return m.UpstreamRequestBody()
+	case requestdetail.FieldResponseContent:
+		return m.ResponseContent()
 	case requestdetail.FieldResponseBody:
 		return m.ResponseBody()
 	case requestdetail.FieldErrorMessage:
@@ -31207,6 +31249,8 @@ func (m *RequestDetailMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldRequestBody(ctx)
 	case requestdetail.FieldUpstreamRequestBody:
 		return m.OldUpstreamRequestBody(ctx)
+	case requestdetail.FieldResponseContent:
+		return m.OldResponseContent(ctx)
 	case requestdetail.FieldResponseBody:
 		return m.OldResponseBody(ctx)
 	case requestdetail.FieldErrorMessage:
@@ -31382,6 +31426,13 @@ func (m *RequestDetailMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpstreamRequestBody(v)
+		return nil
+	case requestdetail.FieldResponseContent:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponseContent(v)
 		return nil
 	case requestdetail.FieldResponseBody:
 		v, ok := value.(string)
@@ -31653,6 +31704,9 @@ func (m *RequestDetailMutation) ResetField(name string) error {
 		return nil
 	case requestdetail.FieldUpstreamRequestBody:
 		m.ResetUpstreamRequestBody()
+		return nil
+	case requestdetail.FieldResponseContent:
+		m.ResetResponseContent()
 		return nil
 	case requestdetail.FieldResponseBody:
 		m.ResetResponseBody()

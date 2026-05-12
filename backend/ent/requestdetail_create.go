@@ -321,6 +321,20 @@ func (_c *RequestDetailCreate) SetNillableUpstreamRequestBody(v *string) *Reques
 	return _c
 }
 
+// SetResponseContent sets the "response_content" field.
+func (_c *RequestDetailCreate) SetResponseContent(v string) *RequestDetailCreate {
+	_c.mutation.SetResponseContent(v)
+	return _c
+}
+
+// SetNillableResponseContent sets the "response_content" field if the given value is not nil.
+func (_c *RequestDetailCreate) SetNillableResponseContent(v *string) *RequestDetailCreate {
+	if v != nil {
+		_c.SetResponseContent(*v)
+	}
+	return _c
+}
+
 // SetResponseBody sets the "response_body" field.
 func (_c *RequestDetailCreate) SetResponseBody(v string) *RequestDetailCreate {
 	_c.mutation.SetResponseBody(v)
@@ -458,6 +472,10 @@ func (_c *RequestDetailCreate) defaults() {
 		v := requestdetail.DefaultUpstreamRequestBody
 		_c.mutation.SetUpstreamRequestBody(v)
 	}
+	if _, ok := _c.mutation.ResponseContent(); !ok {
+		v := requestdetail.DefaultResponseContent
+		_c.mutation.SetResponseContent(v)
+	}
 	if _, ok := _c.mutation.ResponseBody(); !ok {
 		v := requestdetail.DefaultResponseBody
 		_c.mutation.SetResponseBody(v)
@@ -567,6 +585,9 @@ func (_c *RequestDetailCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpstreamRequestBody(); !ok {
 		return &ValidationError{Name: "upstream_request_body", err: errors.New(`ent: missing required field "RequestDetail.upstream_request_body"`)}
+	}
+	if _, ok := _c.mutation.ResponseContent(); !ok {
+		return &ValidationError{Name: "response_content", err: errors.New(`ent: missing required field "RequestDetail.response_content"`)}
 	}
 	if _, ok := _c.mutation.ResponseBody(); !ok {
 		return &ValidationError{Name: "response_body", err: errors.New(`ent: missing required field "RequestDetail.response_body"`)}
@@ -695,6 +716,10 @@ func (_c *RequestDetailCreate) createSpec() (*RequestDetail, *sqlgraph.CreateSpe
 	if value, ok := _c.mutation.UpstreamRequestBody(); ok {
 		_spec.SetField(requestdetail.FieldUpstreamRequestBody, field.TypeString, value)
 		_node.UpstreamRequestBody = value
+	}
+	if value, ok := _c.mutation.ResponseContent(); ok {
+		_spec.SetField(requestdetail.FieldResponseContent, field.TypeString, value)
+		_node.ResponseContent = value
 	}
 	if value, ok := _c.mutation.ResponseBody(); ok {
 		_spec.SetField(requestdetail.FieldResponseBody, field.TypeString, value)
@@ -1105,6 +1130,18 @@ func (u *RequestDetailUpsert) SetUpstreamRequestBody(v string) *RequestDetailUps
 // UpdateUpstreamRequestBody sets the "upstream_request_body" field to the value that was provided on create.
 func (u *RequestDetailUpsert) UpdateUpstreamRequestBody() *RequestDetailUpsert {
 	u.SetExcluded(requestdetail.FieldUpstreamRequestBody)
+	return u
+}
+
+// SetResponseContent sets the "response_content" field.
+func (u *RequestDetailUpsert) SetResponseContent(v string) *RequestDetailUpsert {
+	u.Set(requestdetail.FieldResponseContent, v)
+	return u
+}
+
+// UpdateResponseContent sets the "response_content" field to the value that was provided on create.
+func (u *RequestDetailUpsert) UpdateResponseContent() *RequestDetailUpsert {
+	u.SetExcluded(requestdetail.FieldResponseContent)
 	return u
 }
 
@@ -1592,6 +1629,20 @@ func (u *RequestDetailUpsertOne) SetUpstreamRequestBody(v string) *RequestDetail
 func (u *RequestDetailUpsertOne) UpdateUpstreamRequestBody() *RequestDetailUpsertOne {
 	return u.Update(func(s *RequestDetailUpsert) {
 		s.UpdateUpstreamRequestBody()
+	})
+}
+
+// SetResponseContent sets the "response_content" field.
+func (u *RequestDetailUpsertOne) SetResponseContent(v string) *RequestDetailUpsertOne {
+	return u.Update(func(s *RequestDetailUpsert) {
+		s.SetResponseContent(v)
+	})
+}
+
+// UpdateResponseContent sets the "response_content" field to the value that was provided on create.
+func (u *RequestDetailUpsertOne) UpdateResponseContent() *RequestDetailUpsertOne {
+	return u.Update(func(s *RequestDetailUpsert) {
+		s.UpdateResponseContent()
 	})
 }
 
@@ -2251,6 +2302,20 @@ func (u *RequestDetailUpsertBulk) SetUpstreamRequestBody(v string) *RequestDetai
 func (u *RequestDetailUpsertBulk) UpdateUpstreamRequestBody() *RequestDetailUpsertBulk {
 	return u.Update(func(s *RequestDetailUpsert) {
 		s.UpdateUpstreamRequestBody()
+	})
+}
+
+// SetResponseContent sets the "response_content" field.
+func (u *RequestDetailUpsertBulk) SetResponseContent(v string) *RequestDetailUpsertBulk {
+	return u.Update(func(s *RequestDetailUpsert) {
+		s.SetResponseContent(v)
+	})
+}
+
+// UpdateResponseContent sets the "response_content" field to the value that was provided on create.
+func (u *RequestDetailUpsertBulk) UpdateResponseContent() *RequestDetailUpsertBulk {
+	return u.Update(func(s *RequestDetailUpsert) {
+		s.UpdateResponseContent()
 	})
 }
 

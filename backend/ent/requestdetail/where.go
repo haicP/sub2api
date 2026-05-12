@@ -159,6 +159,11 @@ func UpstreamRequestBody(v string) predicate.RequestDetail {
 	return predicate.RequestDetail(sql.FieldEQ(FieldUpstreamRequestBody, v))
 }
 
+// ResponseContent applies equality check predicate on the "response_content" field. It's identical to ResponseContentEQ.
+func ResponseContent(v string) predicate.RequestDetail {
+	return predicate.RequestDetail(sql.FieldEQ(FieldResponseContent, v))
+}
+
 // ResponseBody applies equality check predicate on the "response_body" field. It's identical to ResponseBodyEQ.
 func ResponseBody(v string) predicate.RequestDetail {
 	return predicate.RequestDetail(sql.FieldEQ(FieldResponseBody, v))
@@ -1272,6 +1277,71 @@ func UpstreamRequestBodyEqualFold(v string) predicate.RequestDetail {
 // UpstreamRequestBodyContainsFold applies the ContainsFold predicate on the "upstream_request_body" field.
 func UpstreamRequestBodyContainsFold(v string) predicate.RequestDetail {
 	return predicate.RequestDetail(sql.FieldContainsFold(FieldUpstreamRequestBody, v))
+}
+
+// ResponseContentEQ applies the EQ predicate on the "response_content" field.
+func ResponseContentEQ(v string) predicate.RequestDetail {
+	return predicate.RequestDetail(sql.FieldEQ(FieldResponseContent, v))
+}
+
+// ResponseContentNEQ applies the NEQ predicate on the "response_content" field.
+func ResponseContentNEQ(v string) predicate.RequestDetail {
+	return predicate.RequestDetail(sql.FieldNEQ(FieldResponseContent, v))
+}
+
+// ResponseContentIn applies the In predicate on the "response_content" field.
+func ResponseContentIn(vs ...string) predicate.RequestDetail {
+	return predicate.RequestDetail(sql.FieldIn(FieldResponseContent, vs...))
+}
+
+// ResponseContentNotIn applies the NotIn predicate on the "response_content" field.
+func ResponseContentNotIn(vs ...string) predicate.RequestDetail {
+	return predicate.RequestDetail(sql.FieldNotIn(FieldResponseContent, vs...))
+}
+
+// ResponseContentGT applies the GT predicate on the "response_content" field.
+func ResponseContentGT(v string) predicate.RequestDetail {
+	return predicate.RequestDetail(sql.FieldGT(FieldResponseContent, v))
+}
+
+// ResponseContentGTE applies the GTE predicate on the "response_content" field.
+func ResponseContentGTE(v string) predicate.RequestDetail {
+	return predicate.RequestDetail(sql.FieldGTE(FieldResponseContent, v))
+}
+
+// ResponseContentLT applies the LT predicate on the "response_content" field.
+func ResponseContentLT(v string) predicate.RequestDetail {
+	return predicate.RequestDetail(sql.FieldLT(FieldResponseContent, v))
+}
+
+// ResponseContentLTE applies the LTE predicate on the "response_content" field.
+func ResponseContentLTE(v string) predicate.RequestDetail {
+	return predicate.RequestDetail(sql.FieldLTE(FieldResponseContent, v))
+}
+
+// ResponseContentContains applies the Contains predicate on the "response_content" field.
+func ResponseContentContains(v string) predicate.RequestDetail {
+	return predicate.RequestDetail(sql.FieldContains(FieldResponseContent, v))
+}
+
+// ResponseContentHasPrefix applies the HasPrefix predicate on the "response_content" field.
+func ResponseContentHasPrefix(v string) predicate.RequestDetail {
+	return predicate.RequestDetail(sql.FieldHasPrefix(FieldResponseContent, v))
+}
+
+// ResponseContentHasSuffix applies the HasSuffix predicate on the "response_content" field.
+func ResponseContentHasSuffix(v string) predicate.RequestDetail {
+	return predicate.RequestDetail(sql.FieldHasSuffix(FieldResponseContent, v))
+}
+
+// ResponseContentEqualFold applies the EqualFold predicate on the "response_content" field.
+func ResponseContentEqualFold(v string) predicate.RequestDetail {
+	return predicate.RequestDetail(sql.FieldEqualFold(FieldResponseContent, v))
+}
+
+// ResponseContentContainsFold applies the ContainsFold predicate on the "response_content" field.
+func ResponseContentContainsFold(v string) predicate.RequestDetail {
+	return predicate.RequestDetail(sql.FieldContainsFold(FieldResponseContent, v))
 }
 
 // ResponseBodyEQ applies the EQ predicate on the "response_body" field.

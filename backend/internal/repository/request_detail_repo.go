@@ -21,7 +21,7 @@ const requestDetailSelectColumns = `
 	id, request_id, created_at, completed_at, duration_ms, status_code, success,
 	platform, endpoint, upstream_endpoint, model, upstream_model, stream,
 	user_id, api_key_id, account_id, group_id, subscription_id, ip_address, user_agent,
-	request_headers, %s AS request_body, %s AS upstream_request_body, response_headers, %s AS response_body,
+	request_headers, %s AS request_body, %s AS upstream_request_body, response_headers, %s AS response_content, %s AS response_body,
 	response_truncated, error_message,
 	COALESCE(octet_length(request_body), 0), COALESCE(octet_length(response_body), 0)
 `
@@ -53,13 +53,13 @@ func (r *requestDetailRepository) Create(ctx context.Context, detail *service.Re
 			platform, endpoint, upstream_endpoint, model, upstream_model, stream,
 			user_id, api_key_id, account_id, group_id, subscription_id,
 			ip_address, user_agent, request_headers, request_body, upstream_request_body,
-			response_headers, response_body, response_truncated, error_message
+			response_headers, response_content, response_body, response_truncated, error_message
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
 			$7, $8, $9, $10, $11, $12,
 			$13, $14, $15, $16, $17,
 			$18, $19, $20::jsonb, $21, $22,
-			$23::jsonb, $24, $25, $26
+			$23::jsonb, $24, $25, $26, $27
 		)
 		ON CONFLICT (request_id) DO UPDATE SET
 			completed_at = EXCLUDED.completed_at,
@@ -83,6 +83,7 @@ func (r *requestDetailRepository) Create(ctx context.Context, detail *service.Re
 			request_body = EXCLUDED.request_body,
 			upstream_request_body = EXCLUDED.upstream_request_body,
 			response_headers = EXCLUDED.response_headers,
+			response_content = EXCLUDED.response_content,
 			response_body = EXCLUDED.response_body,
 			response_truncated = EXCLUDED.response_truncated,
 			error_message = EXCLUDED.error_message
@@ -117,6 +118,7 @@ func (r *requestDetailRepository) Create(ctx context.Context, detail *service.Re
 			detail.RequestBody,
 			detail.UpstreamRequestBody,
 			string(responseHeaders),
+			detail.ResponseContent,
 			detail.ResponseBody,
 			detail.ResponseTruncated,
 			detail.ErrorMessage,
@@ -142,7 +144,7 @@ func (r *requestDetailRepository) List(ctx context.Context, params pagination.Pa
 
 	sortBy := normalizeRequestDetailSort(params.SortBy)
 	sortOrder := normalizeSortOrder(params.SortOrder)
-	selectColumns := fmt.Sprintf(requestDetailSelectColumns, "''", "''", "''")
+	selectColumns := fmt.Sprintf(requestDetailSelectColumns, "''", "''", "''", "''")
 	query := fmt.Sprintf(`
 		SELECT %s
 		FROM request_details %s
@@ -165,7 +167,7 @@ func (r *requestDetailRepository) List(ctx context.Context, params pagination.Pa
 }
 
 func (r *requestDetailRepository) GetByID(ctx context.Context, id int64) (*service.RequestDetail, error) {
-	selectColumns := fmt.Sprintf(requestDetailSelectColumns, "request_body", "upstream_request_body", "response_body")
+	selectColumns := fmt.Sprintf(requestDetailSelectColumns, "request_body", "upstream_request_body", "response_content", "response_body")
 	query := `
 		SELECT ` + selectColumns + `
 		FROM request_details
@@ -192,7 +194,7 @@ func (r *requestDetailRepository) GetByID(ctx context.Context, id int64) (*servi
 
 func (r *requestDetailRepository) StreamAll(ctx context.Context, filters service.RequestDetailFilters, write func(service.RequestDetail) error) error {
 	where, args := buildRequestDetailWhere(filters)
-	selectColumns := fmt.Sprintf(requestDetailSelectColumns, "request_body", "upstream_request_body", "response_body")
+	selectColumns := fmt.Sprintf(requestDetailSelectColumns, "request_body", "upstream_request_body", "response_content", "response_body")
 	query := `
 		SELECT ` + selectColumns + `
 		FROM request_details ` + where + `
@@ -249,6 +251,7 @@ func scanRequestDetail(scanner requestDetailScanner) (*service.RequestDetail, er
 		requestBody         string
 		upstreamRequestBody string
 		responseHeadersRaw  []byte
+		responseContent     string
 		responseBody        string
 		requestBodyBytes    int
 		responseBodyBytes   int
@@ -279,6 +282,7 @@ func scanRequestDetail(scanner requestDetailScanner) (*service.RequestDetail, er
 		&requestBody,
 		&upstreamRequestBody,
 		&responseHeadersRaw,
+		&responseContent,
 		&responseBody,
 		&detail.ResponseTruncated,
 		&detail.ErrorMessage,
@@ -326,7 +330,16 @@ func scanRequestDetail(scanner requestDetailScanner) (*service.RequestDetail, er
 	}
 	detail.RequestBody = requestBody
 	detail.UpstreamRequestBody = upstreamRequestBody
+	detail.ResponseContent = responseContent
 	detail.ResponseBody = responseBody
+	if detail.ResponseContent == "" && detail.ResponseBody != "" {
+		detail.ResponseContent = service.ExtractRequestDetailResponseContent(
+			service.RequestDetailContext{
+				Platform: detail.Platform,
+			},
+			detail.ResponseBody,
+		)
+	}
 	detail.RequestBodyBytes = requestBodyBytes
 	detail.ResponseBodyBytes = responseBodyBytes
 	return &detail, nil

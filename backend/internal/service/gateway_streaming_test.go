@@ -189,6 +189,47 @@ func TestHandleStreamingResponse_EmptyStream(t *testing.T) {
 	require.NotNil(t, result)
 }
 
+func TestHandleStreamingResponse_TerminalEventWithoutUpstreamCloseReturns(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := newMinimalGatewayService()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+
+	upstreamBody := []byte("data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":10}}}\n\n" +
+		"data: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":15}}\n\n" +
+		"data: [DONE]\n\n")
+	upstreamStream := newOpenAICompatBlockingReadCloser(upstreamBody)
+	defer func() {
+		require.NoError(t, upstreamStream.Close())
+	}()
+
+	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: upstreamStream}
+
+	type streamResult struct {
+		result *streamingResult
+		err    error
+	}
+	resultCh := make(chan streamResult, 1)
+	go func() {
+		result, err := svc.handleStreamingResponse(context.Background(), resp, c, &Account{ID: 1}, time.Now(), "model", "model", false)
+		resultCh <- streamResult{result: result, err: err}
+	}()
+
+	select {
+	case got := <-resultCh:
+		require.NoError(t, got.err)
+		require.NotNil(t, got.result)
+		require.NotNil(t, got.result.usage)
+		require.Equal(t, 10, got.result.usage.InputTokens)
+		require.Equal(t, 15, got.result.usage.OutputTokens)
+		require.Contains(t, rec.Body.String(), "data: [DONE]")
+	case <-time.After(time.Second):
+		require.Fail(t, "handleStreamingResponse should return after terminal event even if upstream keeps the connection open")
+	}
+}
+
 func TestHandleStreamingResponse_SpecialCharactersInJSON(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := newMinimalGatewayService()

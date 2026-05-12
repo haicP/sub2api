@@ -1187,6 +1187,7 @@ var (
 		{Name: "response_headers", Type: field.TypeJSON, Default: map[string]schema.Expr{"postgres": "'{}'::jsonb", "sqlite3": "'{}'"}},
 		{Name: "request_body", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "upstream_request_body", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "response_content", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "response_body", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "error_message", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "response_truncated", Type: field.TypeBool, Default: false},

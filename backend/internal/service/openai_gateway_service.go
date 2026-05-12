@@ -3615,6 +3615,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				flusher.Flush()
 			}
 		}
+		if sawTerminalEvent {
+			return resultWithUsage(), nil
+		}
 	}
 	if err := scanner.Err(); err != nil {
 		if sawTerminalEvent && !sawFailedEvent {
@@ -4486,6 +4489,9 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			if streamFailoverErr != nil {
 				return resultWithUsage(), streamFailoverErr
 			}
+			if sawTerminalEvent {
+				return finalizeStream()
+			}
 		}
 		if result, err, done := handleScanErr(scanner.Err()); done {
 			return result, err
@@ -4537,6 +4543,9 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			processSSELine(ev.line, len(events) == 0)
 			if streamFailoverErr != nil {
 				return resultWithUsage(), streamFailoverErr
+			}
+			if sawTerminalEvent {
+				return finalizeStream()
 			}
 
 		case <-intervalCh:

@@ -411,6 +411,20 @@ func (_u *RequestDetailUpdate) SetNillableUpstreamRequestBody(v *string) *Reques
 	return _u
 }
 
+// SetResponseContent sets the "response_content" field.
+func (_u *RequestDetailUpdate) SetResponseContent(v string) *RequestDetailUpdate {
+	_u.mutation.SetResponseContent(v)
+	return _u
+}
+
+// SetNillableResponseContent sets the "response_content" field if the given value is not nil.
+func (_u *RequestDetailUpdate) SetNillableResponseContent(v *string) *RequestDetailUpdate {
+	if v != nil {
+		_u.SetResponseContent(*v)
+	}
+	return _u
+}
+
 // SetResponseBody sets the "response_body" field.
 func (_u *RequestDetailUpdate) SetResponseBody(v string) *RequestDetailUpdate {
 	_u.mutation.SetResponseBody(v)
@@ -649,6 +663,9 @@ func (_u *RequestDetailUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	}
 	if value, ok := _u.mutation.UpstreamRequestBody(); ok {
 		_spec.SetField(requestdetail.FieldUpstreamRequestBody, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ResponseContent(); ok {
+		_spec.SetField(requestdetail.FieldResponseContent, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.ResponseBody(); ok {
 		_spec.SetField(requestdetail.FieldResponseBody, field.TypeString, value)
@@ -1062,6 +1079,20 @@ func (_u *RequestDetailUpdateOne) SetNillableUpstreamRequestBody(v *string) *Req
 	return _u
 }
 
+// SetResponseContent sets the "response_content" field.
+func (_u *RequestDetailUpdateOne) SetResponseContent(v string) *RequestDetailUpdateOne {
+	_u.mutation.SetResponseContent(v)
+	return _u
+}
+
+// SetNillableResponseContent sets the "response_content" field if the given value is not nil.
+func (_u *RequestDetailUpdateOne) SetNillableResponseContent(v *string) *RequestDetailUpdateOne {
+	if v != nil {
+		_u.SetResponseContent(*v)
+	}
+	return _u
+}
+
 // SetResponseBody sets the "response_body" field.
 func (_u *RequestDetailUpdateOne) SetResponseBody(v string) *RequestDetailUpdateOne {
 	_u.mutation.SetResponseBody(v)
@@ -1330,6 +1361,9 @@ func (_u *RequestDetailUpdateOne) sqlSave(ctx context.Context) (_node *RequestDe
 	}
 	if value, ok := _u.mutation.UpstreamRequestBody(); ok {
 		_spec.SetField(requestdetail.FieldUpstreamRequestBody, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ResponseContent(); ok {
+		_spec.SetField(requestdetail.FieldResponseContent, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.ResponseBody(); ok {
 		_spec.SetField(requestdetail.FieldResponseBody, field.TypeString, value)

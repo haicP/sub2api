@@ -146,75 +146,98 @@
           </table>
         </div>
       </section>
-
-      <section v-if="selectedDetail" class="card p-4">
-        <div class="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h2 class="text-base font-semibold text-gray-900 dark:text-white">请求详情明细</h2>
-            <p class="mt-1 font-mono text-xs text-gray-500 dark:text-gray-400">{{ selectedDetail.request_id }}</p>
-          </div>
-          <button class="btn btn-secondary btn-sm" @click="selectedDetail = null">关闭</button>
-        </div>
-        <div class="grid gap-4 lg:grid-cols-2">
-          <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-            <div><span class="font-medium">平台：</span>{{ selectedDetail.platform }}</div>
-            <div><span class="font-medium">模型：</span>{{ selectedDetail.model }}</div>
-            <div><span class="font-medium">状态码：</span>{{ selectedDetail.status_code }}</div>
-            <div><span class="font-medium">耗时：</span>{{ selectedDetail.duration_ms ?? '-' }}</div>
-          </div>
-          <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-            <div><span class="font-medium">用户：</span>{{ selectedDetail.user_id ?? '-' }}</div>
-            <div><span class="font-medium">API Key：</span>{{ selectedDetail.api_key_id ?? '-' }}</div>
-            <div><span class="font-medium">账号：</span>{{ selectedDetail.account_id ?? '-' }}</div>
-            <div><span class="font-medium">Endpoint：</span>{{ selectedDetail.endpoint }}</div>
-          </div>
-        </div>
-        <div class="mt-4 grid gap-4 lg:grid-cols-2">
-          <div>
-            <div class="mb-2 flex items-center justify-between">
-              <h3 class="text-sm font-medium text-gray-900 dark:text-white">请求头</h3>
-              <button class="btn btn-secondary btn-sm" @click="copyText(formatJSON(selectedDetail.request_headers))">复制</button>
-            </div>
-            <pre class="max-h-96 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ formatJSON(selectedDetail.request_headers) }}</pre>
-          </div>
-          <div>
-            <div class="mb-2 flex items-center justify-between">
-              <h3 class="text-sm font-medium text-gray-900 dark:text-white">响应头</h3>
-              <button class="btn btn-secondary btn-sm" @click="copyText(formatJSON(selectedDetail.response_headers))">复制</button>
-            </div>
-            <pre class="max-h-96 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ formatJSON(selectedDetail.response_headers) }}</pre>
-          </div>
-          <div>
-            <div class="mb-2 flex items-center justify-between">
-              <h3 class="text-sm font-medium text-gray-900 dark:text-white">入站请求体</h3>
-              <button class="btn btn-secondary btn-sm" @click="copyText(selectedDetail.request_body || '')">复制</button>
-            </div>
-            <pre class="max-h-96 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ selectedDetail.request_body }}</pre>
-          </div>
-          <div>
-            <div class="mb-2 flex items-center justify-between">
-              <h3 class="text-sm font-medium text-gray-900 dark:text-white">上游请求体</h3>
-              <button class="btn btn-secondary btn-sm" @click="copyText(selectedDetail.upstream_request_body || '')">复制</button>
-            </div>
-            <pre class="max-h-96 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ selectedDetail.upstream_request_body }}</pre>
-          </div>
-          <div class="lg:col-span-2">
-            <div class="mb-2 flex items-center justify-between">
-              <h3 class="text-sm font-medium text-gray-900 dark:text-white">响应体</h3>
-              <button class="btn btn-secondary btn-sm" @click="copyText(selectedDetail.response_body || '')">复制</button>
-            </div>
-            <pre class="max-h-96 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ selectedDetail.response_body }}</pre>
-          </div>
-        </div>
-      </section>
     </div>
   </AppLayout>
+
+  <BaseDialog
+    :show="detailDialogOpen"
+    title="请求详情明细"
+    width="extra-wide"
+    :close-on-click-outside="true"
+    @close="closeDetailDialog"
+  >
+    <div v-if="detailLoading" class="flex min-h-[240px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+      <div class="flex items-center gap-3">
+        <span class="spinner"></span>
+        <span>正在加载请求详情...</span>
+      </div>
+    </div>
+
+    <div v-else-if="selectedDetail" class="space-y-4">
+      <div>
+        <p class="font-mono text-xs text-gray-500 dark:text-gray-400">{{ selectedDetail.request_id }}</p>
+      </div>
+      <div class="grid gap-4 lg:grid-cols-2">
+        <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+          <div><span class="font-medium">平台：</span>{{ selectedDetail.platform }}</div>
+          <div><span class="font-medium">模型：</span>{{ selectedDetail.model }}</div>
+          <div><span class="font-medium">状态码：</span>{{ selectedDetail.status_code }}</div>
+          <div><span class="font-medium">耗时：</span>{{ selectedDetail.duration_ms ?? '-' }}</div>
+        </div>
+        <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+          <div><span class="font-medium">用户：</span>{{ selectedDetail.user_id ?? '-' }}</div>
+          <div><span class="font-medium">API Key：</span>{{ selectedDetail.api_key_id ?? '-' }}</div>
+          <div><span class="font-medium">账号：</span>{{ selectedDetail.account_id ?? '-' }}</div>
+          <div><span class="font-medium">Endpoint：</span>{{ selectedDetail.endpoint }}</div>
+        </div>
+      </div>
+      <div class="grid gap-4 lg:grid-cols-2">
+        <div>
+          <div class="mb-2 flex items-center justify-between">
+            <h3 class="text-sm font-medium text-gray-900 dark:text-white">请求头</h3>
+            <button class="btn btn-secondary btn-sm" @click="copyText(formatJSON(selectedDetail.request_headers))">复制</button>
+          </div>
+          <pre class="max-h-24 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ formatJSON(selectedDetail.request_headers) }}</pre>
+        </div>
+        <div>
+          <div class="mb-2 flex items-center justify-between">
+            <h3 class="text-sm font-medium text-gray-900 dark:text-white">响应头</h3>
+            <button class="btn btn-secondary btn-sm" @click="copyText(formatJSON(selectedDetail.response_headers))">复制</button>
+          </div>
+          <pre class="max-h-24 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ formatJSON(selectedDetail.response_headers) }}</pre>
+        </div>
+        <div>
+          <div class="mb-2 flex items-center justify-between">
+            <h3 class="text-sm font-medium text-gray-900 dark:text-white">入站请求体</h3>
+            <button class="btn btn-secondary btn-sm" @click="copyText(selectedDetail.request_body || '')">复制</button>
+          </div>
+          <pre class="max-h-96 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ selectedDetail.request_body }}</pre>
+        </div>
+        <div>
+          <div class="mb-2 flex items-center justify-between">
+            <h3 class="text-sm font-medium text-gray-900 dark:text-white">上游请求体</h3>
+            <button class="btn btn-secondary btn-sm" @click="copyText(selectedDetail.upstream_request_body || '')">复制</button>
+          </div>
+          <pre class="max-h-96 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ selectedDetail.upstream_request_body }}</pre>
+        </div>
+        <div class="lg:col-span-2">
+          <div class="mb-2 flex items-center justify-between">
+            <h3 class="text-sm font-medium text-gray-900 dark:text-white">响应内容</h3>
+            <button class="btn btn-secondary btn-sm" @click="copyText(selectedDetail.response_content || '')">复制</button>
+          </div>
+          <pre class="max-h-96 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ selectedDetail.response_content || '-' }}</pre>
+        </div>
+        <div class="lg:col-span-2">
+          <div class="mb-2 flex items-center justify-between">
+            <h3 class="text-sm font-medium text-gray-900 dark:text-white">响应体</h3>
+            <button class="btn btn-secondary btn-sm" @click="copyText(selectedDetail.response_body || '')">复制</button>
+          </div>
+          <pre class="max-h-96 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ selectedDetail.response_body }}</pre>
+        </div>
+      </div>
+    </div>
+
+    <template #footer>
+      <button class="btn btn-secondary" @click="closeDetailDialog">关闭</button>
+    </template>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { saveAs } from 'file-saver'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import { requestDetailsAPI, type RequestDetail, type RequestDetailBackupRecord, type RequestDetailBackupSchedule, type RequestDetailListParams, type RequestDetailSummary } from '@/api/admin/requestDetails'
 import { useAppStore } from '@/stores'
@@ -227,6 +250,8 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const selectedDetail = ref<RequestDetail | null>(null)
+const detailDialogOpen = ref(false)
+const detailLoading = ref(false)
 const backups = ref<RequestDetailBackupRecord[]>([])
 const schedule = reactive<RequestDetailBackupSchedule>({
   enabled: false,
@@ -312,11 +337,23 @@ const resetFilters = () => {
 }
 
 const openDetail = async (id: number) => {
+  detailDialogOpen.value = true
+  detailLoading.value = true
+  selectedDetail.value = null
   try {
     selectedDetail.value = await requestDetailsAPI.get(id)
   } catch (error) {
+    detailDialogOpen.value = false
     appStore.showError((error as Error).message || '加载请求详情失败')
+  } finally {
+    detailLoading.value = false
   }
+}
+
+const closeDetailDialog = () => {
+  detailDialogOpen.value = false
+  detailLoading.value = false
+  selectedDetail.value = null
 }
 
 const handleExport = async () => {

@@ -89,7 +89,7 @@ func (h *RequestDetailHandler) Export(c *gin.Context) {
 		"ID", "Request ID", "Created At", "Completed At", "Duration MS", "Status Code", "Success",
 		"Platform", "Endpoint", "Upstream Endpoint", "Model", "Upstream Model", "Stream",
 		"User ID", "API Key ID", "Account ID", "Group ID", "Subscription ID", "IP Address", "User Agent",
-		"Request Headers", "Request Body", "Upstream Request Body", "Response Headers", "Response Body", "Error Message",
+		"Request Headers", "Request Body", "Upstream Request Body", "Response Headers", "Response Content", "Response Body", "Error Message",
 	}
 	for idx, header := range headers {
 		cell, _ := excelize.CoordinatesToCellName(idx+1, 1)
@@ -121,6 +121,7 @@ func (h *RequestDetailHandler) Export(c *gin.Context) {
 			item.RequestBody,
 			item.UpstreamRequestBody,
 			mustJSON(item.ResponseHeaders),
+			item.ResponseContent,
 			item.ResponseBody,
 			item.ErrorMessage,
 		}

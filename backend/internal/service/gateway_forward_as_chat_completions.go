@@ -458,6 +458,9 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 		if processAnthropicEvent(&event) {
 			return resultWithUsage(), nil
 		}
+		if event.Type == "message_stop" {
+			break
+		}
 	}
 
 	if err := scanner.Err(); err != nil {

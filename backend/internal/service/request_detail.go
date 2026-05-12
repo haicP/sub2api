@@ -41,6 +41,7 @@ type RequestDetail struct {
 	RequestBody         string              `json:"request_body,omitempty"`
 	UpstreamRequestBody string              `json:"upstream_request_body,omitempty"`
 	ResponseHeaders     map[string][]string `json:"response_headers,omitempty"`
+	ResponseContent     string              `json:"response_content,omitempty"`
 	ResponseBody        string              `json:"response_body,omitempty"`
 	ResponseTruncated   bool                `json:"response_truncated"`
 	ErrorMessage        string              `json:"error_message,omitempty"`

@@ -490,6 +490,9 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 		if processEvent(&event) {
 			return resultWithUsage(), nil
 		}
+		if event.Type == "message_stop" {
+			return finalizeStream()
+		}
 	}
 
 	if err := scanner.Err(); err != nil {

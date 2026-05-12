@@ -64,6 +64,8 @@ type RequestDetail struct {
 	RequestBody string `json:"request_body,omitempty"`
 	// UpstreamRequestBody holds the value of the "upstream_request_body" field.
 	UpstreamRequestBody string `json:"upstream_request_body,omitempty"`
+	// ResponseContent holds the value of the "response_content" field.
+	ResponseContent string `json:"response_content,omitempty"`
 	// ResponseBody holds the value of the "response_body" field.
 	ResponseBody string `json:"response_body,omitempty"`
 	// ErrorMessage holds the value of the "error_message" field.
@@ -84,7 +86,7 @@ func (*RequestDetail) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case requestdetail.FieldID, requestdetail.FieldDurationMs, requestdetail.FieldStatusCode, requestdetail.FieldUserID, requestdetail.FieldAPIKeyID, requestdetail.FieldAccountID, requestdetail.FieldGroupID, requestdetail.FieldSubscriptionID:
 			values[i] = new(sql.NullInt64)
-		case requestdetail.FieldRequestID, requestdetail.FieldPlatform, requestdetail.FieldEndpoint, requestdetail.FieldUpstreamEndpoint, requestdetail.FieldModel, requestdetail.FieldUpstreamModel, requestdetail.FieldIPAddress, requestdetail.FieldUserAgent, requestdetail.FieldRequestBody, requestdetail.FieldUpstreamRequestBody, requestdetail.FieldResponseBody, requestdetail.FieldErrorMessage:
+		case requestdetail.FieldRequestID, requestdetail.FieldPlatform, requestdetail.FieldEndpoint, requestdetail.FieldUpstreamEndpoint, requestdetail.FieldModel, requestdetail.FieldUpstreamModel, requestdetail.FieldIPAddress, requestdetail.FieldUserAgent, requestdetail.FieldRequestBody, requestdetail.FieldUpstreamRequestBody, requestdetail.FieldResponseContent, requestdetail.FieldResponseBody, requestdetail.FieldErrorMessage:
 			values[i] = new(sql.NullString)
 		case requestdetail.FieldCreatedAt, requestdetail.FieldCompletedAt:
 			values[i] = new(sql.NullTime)
@@ -258,6 +260,12 @@ func (_m *RequestDetail) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.UpstreamRequestBody = value.String
 			}
+		case requestdetail.FieldResponseContent:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field response_content", values[i])
+			} else if value.Valid {
+				_m.ResponseContent = value.String
+			}
 		case requestdetail.FieldResponseBody:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field response_body", values[i])
@@ -394,6 +402,9 @@ func (_m *RequestDetail) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("upstream_request_body=")
 	builder.WriteString(_m.UpstreamRequestBody)
+	builder.WriteString(", ")
+	builder.WriteString("response_content=")
+	builder.WriteString(_m.ResponseContent)
 	builder.WriteString(", ")
 	builder.WriteString("response_body=")
 	builder.WriteString(_m.ResponseBody)

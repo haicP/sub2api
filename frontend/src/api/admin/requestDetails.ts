@@ -53,6 +53,7 @@ export interface RequestDetail extends RequestDetailSummary {
   request_body?: string
   upstream_request_body?: string
   response_headers?: Record<string, string[]>
+  response_content?: string
   response_body?: string
   response_truncated: boolean
 }

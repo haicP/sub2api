@@ -35,6 +35,7 @@ func TestRequestDetailRepositoryCreateListAndGet(t *testing.T) {
 	requestBody := `{"messages":[{"role":"user","content":"full request body"}]}`
 	upstreamRequestBody := `{"prompt":"full upstream body"}`
 	responseBody := `{"choices":[{"message":{"content":"full response body"}}]}`
+	responseContent := "full response body"
 
 	detail := &service.RequestDetail{
 		RequestID:           "req-detail-1",
@@ -60,6 +61,7 @@ func TestRequestDetailRepositoryCreateListAndGet(t *testing.T) {
 		ResponseHeaders:     responseHeaders,
 		RequestBody:         requestBody,
 		UpstreamRequestBody: upstreamRequestBody,
+		ResponseContent:     responseContent,
 		ResponseBody:        responseBody,
 		ResponseTruncated:   true,
 	}
@@ -89,6 +91,7 @@ func TestRequestDetailRepositoryCreateListAndGet(t *testing.T) {
 			requestBody,
 			upstreamRequestBody,
 			requestDetailJSONArg(t, responseHeaders),
+			responseContent,
 			responseBody,
 			detail.ResponseTruncated,
 			detail.ErrorMessage,
@@ -100,7 +103,7 @@ func TestRequestDetailRepositoryCreateListAndGet(t *testing.T) {
 	require.Equal(t, createdAt, detail.CreatedAt)
 
 	listRows := requestDetailRows().
-		AddRow(int64(11), "req-detail-1", createdAt, completedAt, durationMs, statusCode, true, "openai", "/v1/chat/completions", "/v1/responses", "gpt-5.1", "gpt-5.1-upstream", true, userID, apiKeyID, accountID, groupID, subscriptionID, "127.0.0.1", "sub2api-test", requestDetailMustJSON(t, requestHeaders), "", "", requestDetailMustJSON(t, responseHeaders), "", true, "request failed", int64(len(requestBody)), int64(len(responseBody)))
+		AddRow(int64(11), "req-detail-1", createdAt, completedAt, durationMs, statusCode, true, "openai", "/v1/chat/completions", "/v1/responses", "gpt-5.1", "gpt-5.1-upstream", true, userID, apiKeyID, accountID, groupID, subscriptionID, "127.0.0.1", "sub2api-test", requestDetailMustJSON(t, requestHeaders), "", "", requestDetailMustJSON(t, responseHeaders), "", "", true, "request failed", int64(len(requestBody)), int64(len(responseBody)))
 
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM request_details WHERE request_id = \\$1 AND user_id = \\$2 AND platform = \\$3").
 		WithArgs("req-detail-1", userID, "openai").
@@ -125,7 +128,7 @@ func TestRequestDetailRepositoryCreateListAndGet(t *testing.T) {
 	require.Equal(t, len(responseBody), items[0].ResponseBodyBytes)
 
 	getRows := requestDetailRows().
-		AddRow(int64(11), "req-detail-1", createdAt, completedAt, durationMs, statusCode, true, "openai", "/v1/chat/completions", "/v1/responses", "gpt-5.1", "gpt-5.1-upstream", true, userID, apiKeyID, accountID, groupID, subscriptionID, "127.0.0.1", "sub2api-test", requestDetailMustJSON(t, requestHeaders), requestBody, upstreamRequestBody, requestDetailMustJSON(t, responseHeaders), responseBody, true, "request failed", int64(len(requestBody)), int64(len(responseBody)))
+		AddRow(int64(11), "req-detail-1", createdAt, completedAt, durationMs, statusCode, true, "openai", "/v1/chat/completions", "/v1/responses", "gpt-5.1", "gpt-5.1-upstream", true, userID, apiKeyID, accountID, groupID, subscriptionID, "127.0.0.1", "sub2api-test", requestDetailMustJSON(t, requestHeaders), requestBody, upstreamRequestBody, requestDetailMustJSON(t, responseHeaders), responseContent, responseBody, true, "request failed", int64(len(requestBody)), int64(len(responseBody)))
 
 	mock.ExpectQuery("FROM request_details WHERE id = \\$1").
 		WithArgs(int64(11)).
@@ -135,6 +138,7 @@ func TestRequestDetailRepositoryCreateListAndGet(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, requestBody, got.RequestBody)
 	require.Equal(t, upstreamRequestBody, got.UpstreamRequestBody)
+	require.Equal(t, responseContent, got.ResponseContent)
 	require.Equal(t, responseBody, got.ResponseBody)
 	require.Equal(t, requestHeaders, got.RequestHeaders)
 	require.Equal(t, responseHeaders, got.ResponseHeaders)
@@ -173,7 +177,7 @@ func TestRequestDetailRepositoryStreamAllReturnsFullBodies(t *testing.T) {
 
 	createdAt := time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC)
 	rows := requestDetailRows().
-		AddRow(int64(1), "req-1", createdAt, nil, nil, 200, true, "anthropic", "/v1/messages", "/v1/messages", "claude", "claude", false, nil, nil, nil, nil, nil, "127.0.0.1", "ua", requestDetailMustJSON(t, map[string][]string{"Content-Type": {"application/json"}}), `{"input":"x"}`, `{"upstream":"y"}`, requestDetailMustJSON(t, map[string][]string{"X-Request-ID": {"1"}}), `{"output":"z"}`, false, "", int64(13), int64(14))
+		AddRow(int64(1), "req-1", createdAt, nil, nil, 200, true, "anthropic", "/v1/messages", "/v1/messages", "claude", "claude", false, nil, nil, nil, nil, nil, "127.0.0.1", "ua", requestDetailMustJSON(t, map[string][]string{"Content-Type": {"application/json"}}), `{"input":"x"}`, `{"upstream":"y"}`, requestDetailMustJSON(t, map[string][]string{"X-Request-ID": {"1"}}), `hello`, `{"output":"z"}`, false, "", int64(13), int64(14))
 
 	mock.ExpectQuery("FROM request_details\\s+ORDER BY created_at ASC, id ASC").
 		WillReturnRows(rows)
@@ -187,6 +191,7 @@ func TestRequestDetailRepositoryStreamAllReturnsFullBodies(t *testing.T) {
 	require.Len(t, streamed, 1)
 	require.Equal(t, `{"input":"x"}`, streamed[0].RequestBody)
 	require.Equal(t, `{"upstream":"y"}`, streamed[0].UpstreamRequestBody)
+	require.Equal(t, `hello`, streamed[0].ResponseContent)
 	require.Equal(t, `{"output":"z"}`, streamed[0].ResponseBody)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -217,6 +222,7 @@ func requestDetailRows() *sqlmock.Rows {
 		"request_body",
 		"upstream_request_body",
 		"response_headers",
+		"response_content",
 		"response_body",
 		"response_truncated",
 		"error_message",

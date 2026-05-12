@@ -5438,6 +5438,9 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 					flusher.Flush()
 				}
 			}
+			if sawTerminalEvent {
+				return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected}, nil
+			}
 
 		case <-intervalCh:
 			lastRead := time.Unix(0, atomic.LoadInt64(&lastReadAt))
@@ -7514,6 +7517,9 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 							mergeSSEUsagePatch(usage, usagePatch)
 						}
 					}
+				}
+				if sawTerminalEvent {
+					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected}, nil
 				}
 				continue
 			}

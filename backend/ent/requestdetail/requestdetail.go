@@ -59,6 +59,8 @@ const (
 	FieldRequestBody = "request_body"
 	// FieldUpstreamRequestBody holds the string denoting the upstream_request_body field in the database.
 	FieldUpstreamRequestBody = "upstream_request_body"
+	// FieldResponseContent holds the string denoting the response_content field in the database.
+	FieldResponseContent = "response_content"
 	// FieldResponseBody holds the string denoting the response_body field in the database.
 	FieldResponseBody = "response_body"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
@@ -95,6 +97,7 @@ var Columns = []string{
 	FieldResponseHeaders,
 	FieldRequestBody,
 	FieldUpstreamRequestBody,
+	FieldResponseContent,
 	FieldResponseBody,
 	FieldErrorMessage,
 	FieldResponseTruncated,
@@ -157,6 +160,8 @@ var (
 	DefaultRequestBody string
 	// DefaultUpstreamRequestBody holds the default value on creation for the "upstream_request_body" field.
 	DefaultUpstreamRequestBody string
+	// DefaultResponseContent holds the default value on creation for the "response_content" field.
+	DefaultResponseContent string
 	// DefaultResponseBody holds the default value on creation for the "response_body" field.
 	DefaultResponseBody string
 	// DefaultErrorMessage holds the default value on creation for the "error_message" field.
@@ -276,6 +281,11 @@ func ByRequestBody(opts ...sql.OrderTermOption) OrderOption {
 // ByUpstreamRequestBody orders the results by the upstream_request_body field.
 func ByUpstreamRequestBody(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpstreamRequestBody, opts...).ToFunc()
+}
+
+// ByResponseContent orders the results by the response_content field.
+func ByResponseContent(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResponseContent, opts...).ToFunc()
 }
 
 // ByResponseBody orders the results by the response_body field.

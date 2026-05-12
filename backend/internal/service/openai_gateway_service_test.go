@@ -1486,6 +1486,106 @@ func TestOpenAIStreamingTooLong(t *testing.T) {
 	}
 }
 
+func TestOpenAIStreamingTerminalEventWithoutUpstreamCloseReturns(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		Gateway: config.GatewayConfig{
+			StreamDataIntervalTimeout: 0,
+			StreamKeepaliveInterval:   0,
+			MaxLineSize:               defaultMaxLineSize,
+		},
+	}
+	svc := &OpenAIGatewayService{cfg: cfg}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	upstreamBody := []byte("data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":4,\"output_tokens\":6,\"input_tokens_details\":{\"cached_tokens\":2}}}}\n\n")
+	upstreamStream := newOpenAICompatBlockingReadCloser(upstreamBody)
+	defer func() {
+		require.NoError(t, upstreamStream.Close())
+	}()
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       upstreamStream,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+	}
+
+	type streamResult struct {
+		result *openaiStreamingResult
+		err    error
+	}
+	resultCh := make(chan streamResult, 1)
+	go func() {
+		result, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, &Account{ID: 1}, time.Now(), "model", "model")
+		resultCh <- streamResult{result: result, err: err}
+	}()
+
+	select {
+	case got := <-resultCh:
+		require.NoError(t, got.err)
+		require.NotNil(t, got.result)
+		require.NotNil(t, got.result.usage)
+		require.Equal(t, 4, got.result.usage.InputTokens)
+		require.Equal(t, 6, got.result.usage.OutputTokens)
+		require.Equal(t, 2, got.result.usage.CacheReadInputTokens)
+		require.Contains(t, rec.Body.String(), "response.completed")
+	case <-time.After(time.Second):
+		require.Fail(t, "handleStreamingResponse should return after terminal event even if upstream keeps the connection open")
+	}
+}
+
+func TestOpenAIStreamingPassthroughTerminalEventWithoutUpstreamCloseReturns(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		Gateway: config.GatewayConfig{
+			MaxLineSize: defaultMaxLineSize,
+		},
+	}
+	svc := &OpenAIGatewayService{cfg: cfg}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	upstreamBody := []byte("data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":8,\"output_tokens\":13,\"input_tokens_details\":{\"cached_tokens\":5}}}}\n\n")
+	upstreamStream := newOpenAICompatBlockingReadCloser(upstreamBody)
+	defer func() {
+		require.NoError(t, upstreamStream.Close())
+	}()
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       upstreamStream,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+	}
+
+	type streamResult struct {
+		result *openaiStreamingResultPassthrough
+		err    error
+	}
+	resultCh := make(chan streamResult, 1)
+	go func() {
+		result, err := svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, &Account{ID: 1}, time.Now(), "", "")
+		resultCh <- streamResult{result: result, err: err}
+	}()
+
+	select {
+	case got := <-resultCh:
+		require.NoError(t, got.err)
+		require.NotNil(t, got.result)
+		require.NotNil(t, got.result.usage)
+		require.Equal(t, 8, got.result.usage.InputTokens)
+		require.Equal(t, 13, got.result.usage.OutputTokens)
+		require.Equal(t, 5, got.result.usage.CacheReadInputTokens)
+		require.Contains(t, rec.Body.String(), "response.completed")
+	case <-time.After(time.Second):
+		require.Fail(t, "handleStreamingResponsePassthrough should return after terminal event even if upstream keeps the connection open")
+	}
+}
+
 func TestOpenAINonStreamingContentTypePassThrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{
