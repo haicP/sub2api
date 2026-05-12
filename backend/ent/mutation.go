@@ -36,6 +36,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
+	"github.com/Wei-Shaw/sub2api/ent/requestdetail"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -82,6 +83,7 @@ const (
 	TypePromoCodeUsage                = "PromoCodeUsage"
 	TypeProxy                         = "Proxy"
 	TypeRedeemCode                    = "RedeemCode"
+	TypeRequestDetail                 = "RequestDetail"
 	TypeSecuritySecret                = "SecuritySecret"
 	TypeSetting                       = "Setting"
 	TypeSubscriptionPlan              = "SubscriptionPlan"
@@ -29659,6 +29661,2058 @@ func (m *RedeemCodeMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown RedeemCode edge %s", name)
+}
+
+// RequestDetailMutation represents an operation that mutates the RequestDetail nodes in the graph.
+type RequestDetailMutation struct {
+	config
+	op                    Op
+	typ                   string
+	id                    *int64
+	request_id            *string
+	created_at            *time.Time
+	completed_at          *time.Time
+	duration_ms           *int
+	addduration_ms        *int
+	status_code           *int
+	addstatus_code        *int
+	success               *bool
+	platform              *string
+	endpoint              *string
+	upstream_endpoint     *string
+	model                 *string
+	upstream_model        *string
+	stream                *bool
+	user_id               *int64
+	adduser_id            *int64
+	api_key_id            *int64
+	addapi_key_id         *int64
+	account_id            *int64
+	addaccount_id         *int64
+	group_id              *int64
+	addgroup_id           *int64
+	subscription_id       *int64
+	addsubscription_id    *int64
+	ip_address            *string
+	user_agent            *string
+	request_headers       *map[string][]string
+	response_headers      *map[string][]string
+	request_body          *string
+	upstream_request_body *string
+	response_body         *string
+	error_message         *string
+	response_truncated    *bool
+	clearedFields         map[string]struct{}
+	done                  bool
+	oldValue              func(context.Context) (*RequestDetail, error)
+	predicates            []predicate.RequestDetail
+}
+
+var _ ent.Mutation = (*RequestDetailMutation)(nil)
+
+// requestdetailOption allows management of the mutation configuration using functional options.
+type requestdetailOption func(*RequestDetailMutation)
+
+// newRequestDetailMutation creates new mutation for the RequestDetail entity.
+func newRequestDetailMutation(c config, op Op, opts ...requestdetailOption) *RequestDetailMutation {
+	m := &RequestDetailMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeRequestDetail,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withRequestDetailID sets the ID field of the mutation.
+func withRequestDetailID(id int64) requestdetailOption {
+	return func(m *RequestDetailMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *RequestDetail
+		)
+		m.oldValue = func(ctx context.Context) (*RequestDetail, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().RequestDetail.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withRequestDetail sets the old RequestDetail of the mutation.
+func withRequestDetail(node *RequestDetail) requestdetailOption {
+	return func(m *RequestDetailMutation) {
+		m.oldValue = func(context.Context) (*RequestDetail, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m RequestDetailMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m RequestDetailMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *RequestDetailMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *RequestDetailMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().RequestDetail.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetRequestID sets the "request_id" field.
+func (m *RequestDetailMutation) SetRequestID(s string) {
+	m.request_id = &s
+}
+
+// RequestID returns the value of the "request_id" field in the mutation.
+func (m *RequestDetailMutation) RequestID() (r string, exists bool) {
+	v := m.request_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestID returns the old "request_id" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldRequestID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestID: %w", err)
+	}
+	return oldValue.RequestID, nil
+}
+
+// ResetRequestID resets all changes to the "request_id" field.
+func (m *RequestDetailMutation) ResetRequestID() {
+	m.request_id = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *RequestDetailMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *RequestDetailMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *RequestDetailMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetCompletedAt sets the "completed_at" field.
+func (m *RequestDetailMutation) SetCompletedAt(t time.Time) {
+	m.completed_at = &t
+}
+
+// CompletedAt returns the value of the "completed_at" field in the mutation.
+func (m *RequestDetailMutation) CompletedAt() (r time.Time, exists bool) {
+	v := m.completed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCompletedAt returns the old "completed_at" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldCompletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCompletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCompletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCompletedAt: %w", err)
+	}
+	return oldValue.CompletedAt, nil
+}
+
+// ClearCompletedAt clears the value of the "completed_at" field.
+func (m *RequestDetailMutation) ClearCompletedAt() {
+	m.completed_at = nil
+	m.clearedFields[requestdetail.FieldCompletedAt] = struct{}{}
+}
+
+// CompletedAtCleared returns if the "completed_at" field was cleared in this mutation.
+func (m *RequestDetailMutation) CompletedAtCleared() bool {
+	_, ok := m.clearedFields[requestdetail.FieldCompletedAt]
+	return ok
+}
+
+// ResetCompletedAt resets all changes to the "completed_at" field.
+func (m *RequestDetailMutation) ResetCompletedAt() {
+	m.completed_at = nil
+	delete(m.clearedFields, requestdetail.FieldCompletedAt)
+}
+
+// SetDurationMs sets the "duration_ms" field.
+func (m *RequestDetailMutation) SetDurationMs(i int) {
+	m.duration_ms = &i
+	m.addduration_ms = nil
+}
+
+// DurationMs returns the value of the "duration_ms" field in the mutation.
+func (m *RequestDetailMutation) DurationMs() (r int, exists bool) {
+	v := m.duration_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDurationMs returns the old "duration_ms" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldDurationMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDurationMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDurationMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDurationMs: %w", err)
+	}
+	return oldValue.DurationMs, nil
+}
+
+// AddDurationMs adds i to the "duration_ms" field.
+func (m *RequestDetailMutation) AddDurationMs(i int) {
+	if m.addduration_ms != nil {
+		*m.addduration_ms += i
+	} else {
+		m.addduration_ms = &i
+	}
+}
+
+// AddedDurationMs returns the value that was added to the "duration_ms" field in this mutation.
+func (m *RequestDetailMutation) AddedDurationMs() (r int, exists bool) {
+	v := m.addduration_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDurationMs clears the value of the "duration_ms" field.
+func (m *RequestDetailMutation) ClearDurationMs() {
+	m.duration_ms = nil
+	m.addduration_ms = nil
+	m.clearedFields[requestdetail.FieldDurationMs] = struct{}{}
+}
+
+// DurationMsCleared returns if the "duration_ms" field was cleared in this mutation.
+func (m *RequestDetailMutation) DurationMsCleared() bool {
+	_, ok := m.clearedFields[requestdetail.FieldDurationMs]
+	return ok
+}
+
+// ResetDurationMs resets all changes to the "duration_ms" field.
+func (m *RequestDetailMutation) ResetDurationMs() {
+	m.duration_ms = nil
+	m.addduration_ms = nil
+	delete(m.clearedFields, requestdetail.FieldDurationMs)
+}
+
+// SetStatusCode sets the "status_code" field.
+func (m *RequestDetailMutation) SetStatusCode(i int) {
+	m.status_code = &i
+	m.addstatus_code = nil
+}
+
+// StatusCode returns the value of the "status_code" field in the mutation.
+func (m *RequestDetailMutation) StatusCode() (r int, exists bool) {
+	v := m.status_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatusCode returns the old "status_code" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldStatusCode(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatusCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatusCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatusCode: %w", err)
+	}
+	return oldValue.StatusCode, nil
+}
+
+// AddStatusCode adds i to the "status_code" field.
+func (m *RequestDetailMutation) AddStatusCode(i int) {
+	if m.addstatus_code != nil {
+		*m.addstatus_code += i
+	} else {
+		m.addstatus_code = &i
+	}
+}
+
+// AddedStatusCode returns the value that was added to the "status_code" field in this mutation.
+func (m *RequestDetailMutation) AddedStatusCode() (r int, exists bool) {
+	v := m.addstatus_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetStatusCode resets all changes to the "status_code" field.
+func (m *RequestDetailMutation) ResetStatusCode() {
+	m.status_code = nil
+	m.addstatus_code = nil
+}
+
+// SetSuccess sets the "success" field.
+func (m *RequestDetailMutation) SetSuccess(b bool) {
+	m.success = &b
+}
+
+// Success returns the value of the "success" field in the mutation.
+func (m *RequestDetailMutation) Success() (r bool, exists bool) {
+	v := m.success
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSuccess returns the old "success" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldSuccess(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSuccess is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSuccess requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSuccess: %w", err)
+	}
+	return oldValue.Success, nil
+}
+
+// ResetSuccess resets all changes to the "success" field.
+func (m *RequestDetailMutation) ResetSuccess() {
+	m.success = nil
+}
+
+// SetPlatform sets the "platform" field.
+func (m *RequestDetailMutation) SetPlatform(s string) {
+	m.platform = &s
+}
+
+// Platform returns the value of the "platform" field in the mutation.
+func (m *RequestDetailMutation) Platform() (r string, exists bool) {
+	v := m.platform
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlatform returns the old "platform" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldPlatform(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlatform is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlatform requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlatform: %w", err)
+	}
+	return oldValue.Platform, nil
+}
+
+// ResetPlatform resets all changes to the "platform" field.
+func (m *RequestDetailMutation) ResetPlatform() {
+	m.platform = nil
+}
+
+// SetEndpoint sets the "endpoint" field.
+func (m *RequestDetailMutation) SetEndpoint(s string) {
+	m.endpoint = &s
+}
+
+// Endpoint returns the value of the "endpoint" field in the mutation.
+func (m *RequestDetailMutation) Endpoint() (r string, exists bool) {
+	v := m.endpoint
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEndpoint returns the old "endpoint" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldEndpoint(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEndpoint is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEndpoint requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEndpoint: %w", err)
+	}
+	return oldValue.Endpoint, nil
+}
+
+// ResetEndpoint resets all changes to the "endpoint" field.
+func (m *RequestDetailMutation) ResetEndpoint() {
+	m.endpoint = nil
+}
+
+// SetUpstreamEndpoint sets the "upstream_endpoint" field.
+func (m *RequestDetailMutation) SetUpstreamEndpoint(s string) {
+	m.upstream_endpoint = &s
+}
+
+// UpstreamEndpoint returns the value of the "upstream_endpoint" field in the mutation.
+func (m *RequestDetailMutation) UpstreamEndpoint() (r string, exists bool) {
+	v := m.upstream_endpoint
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpstreamEndpoint returns the old "upstream_endpoint" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldUpstreamEndpoint(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpstreamEndpoint is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpstreamEndpoint requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpstreamEndpoint: %w", err)
+	}
+	return oldValue.UpstreamEndpoint, nil
+}
+
+// ResetUpstreamEndpoint resets all changes to the "upstream_endpoint" field.
+func (m *RequestDetailMutation) ResetUpstreamEndpoint() {
+	m.upstream_endpoint = nil
+}
+
+// SetModel sets the "model" field.
+func (m *RequestDetailMutation) SetModel(s string) {
+	m.model = &s
+}
+
+// Model returns the value of the "model" field in the mutation.
+func (m *RequestDetailMutation) Model() (r string, exists bool) {
+	v := m.model
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldModel returns the old "model" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldModel(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldModel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldModel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldModel: %w", err)
+	}
+	return oldValue.Model, nil
+}
+
+// ResetModel resets all changes to the "model" field.
+func (m *RequestDetailMutation) ResetModel() {
+	m.model = nil
+}
+
+// SetUpstreamModel sets the "upstream_model" field.
+func (m *RequestDetailMutation) SetUpstreamModel(s string) {
+	m.upstream_model = &s
+}
+
+// UpstreamModel returns the value of the "upstream_model" field in the mutation.
+func (m *RequestDetailMutation) UpstreamModel() (r string, exists bool) {
+	v := m.upstream_model
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpstreamModel returns the old "upstream_model" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldUpstreamModel(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpstreamModel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpstreamModel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpstreamModel: %w", err)
+	}
+	return oldValue.UpstreamModel, nil
+}
+
+// ResetUpstreamModel resets all changes to the "upstream_model" field.
+func (m *RequestDetailMutation) ResetUpstreamModel() {
+	m.upstream_model = nil
+}
+
+// SetStream sets the "stream" field.
+func (m *RequestDetailMutation) SetStream(b bool) {
+	m.stream = &b
+}
+
+// Stream returns the value of the "stream" field in the mutation.
+func (m *RequestDetailMutation) Stream() (r bool, exists bool) {
+	v := m.stream
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStream returns the old "stream" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldStream(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStream is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStream requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStream: %w", err)
+	}
+	return oldValue.Stream, nil
+}
+
+// ResetStream resets all changes to the "stream" field.
+func (m *RequestDetailMutation) ResetStream() {
+	m.stream = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *RequestDetailMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *RequestDetailMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldUserID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *RequestDetailMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *RequestDetailMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearUserID clears the value of the "user_id" field.
+func (m *RequestDetailMutation) ClearUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+	m.clearedFields[requestdetail.FieldUserID] = struct{}{}
+}
+
+// UserIDCleared returns if the "user_id" field was cleared in this mutation.
+func (m *RequestDetailMutation) UserIDCleared() bool {
+	_, ok := m.clearedFields[requestdetail.FieldUserID]
+	return ok
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *RequestDetailMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+	delete(m.clearedFields, requestdetail.FieldUserID)
+}
+
+// SetAPIKeyID sets the "api_key_id" field.
+func (m *RequestDetailMutation) SetAPIKeyID(i int64) {
+	m.api_key_id = &i
+	m.addapi_key_id = nil
+}
+
+// APIKeyID returns the value of the "api_key_id" field in the mutation.
+func (m *RequestDetailMutation) APIKeyID() (r int64, exists bool) {
+	v := m.api_key_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyID returns the old "api_key_id" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldAPIKeyID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyID: %w", err)
+	}
+	return oldValue.APIKeyID, nil
+}
+
+// AddAPIKeyID adds i to the "api_key_id" field.
+func (m *RequestDetailMutation) AddAPIKeyID(i int64) {
+	if m.addapi_key_id != nil {
+		*m.addapi_key_id += i
+	} else {
+		m.addapi_key_id = &i
+	}
+}
+
+// AddedAPIKeyID returns the value that was added to the "api_key_id" field in this mutation.
+func (m *RequestDetailMutation) AddedAPIKeyID() (r int64, exists bool) {
+	v := m.addapi_key_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAPIKeyID clears the value of the "api_key_id" field.
+func (m *RequestDetailMutation) ClearAPIKeyID() {
+	m.api_key_id = nil
+	m.addapi_key_id = nil
+	m.clearedFields[requestdetail.FieldAPIKeyID] = struct{}{}
+}
+
+// APIKeyIDCleared returns if the "api_key_id" field was cleared in this mutation.
+func (m *RequestDetailMutation) APIKeyIDCleared() bool {
+	_, ok := m.clearedFields[requestdetail.FieldAPIKeyID]
+	return ok
+}
+
+// ResetAPIKeyID resets all changes to the "api_key_id" field.
+func (m *RequestDetailMutation) ResetAPIKeyID() {
+	m.api_key_id = nil
+	m.addapi_key_id = nil
+	delete(m.clearedFields, requestdetail.FieldAPIKeyID)
+}
+
+// SetAccountID sets the "account_id" field.
+func (m *RequestDetailMutation) SetAccountID(i int64) {
+	m.account_id = &i
+	m.addaccount_id = nil
+}
+
+// AccountID returns the value of the "account_id" field in the mutation.
+func (m *RequestDetailMutation) AccountID() (r int64, exists bool) {
+	v := m.account_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountID returns the old "account_id" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldAccountID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountID: %w", err)
+	}
+	return oldValue.AccountID, nil
+}
+
+// AddAccountID adds i to the "account_id" field.
+func (m *RequestDetailMutation) AddAccountID(i int64) {
+	if m.addaccount_id != nil {
+		*m.addaccount_id += i
+	} else {
+		m.addaccount_id = &i
+	}
+}
+
+// AddedAccountID returns the value that was added to the "account_id" field in this mutation.
+func (m *RequestDetailMutation) AddedAccountID() (r int64, exists bool) {
+	v := m.addaccount_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAccountID clears the value of the "account_id" field.
+func (m *RequestDetailMutation) ClearAccountID() {
+	m.account_id = nil
+	m.addaccount_id = nil
+	m.clearedFields[requestdetail.FieldAccountID] = struct{}{}
+}
+
+// AccountIDCleared returns if the "account_id" field was cleared in this mutation.
+func (m *RequestDetailMutation) AccountIDCleared() bool {
+	_, ok := m.clearedFields[requestdetail.FieldAccountID]
+	return ok
+}
+
+// ResetAccountID resets all changes to the "account_id" field.
+func (m *RequestDetailMutation) ResetAccountID() {
+	m.account_id = nil
+	m.addaccount_id = nil
+	delete(m.clearedFields, requestdetail.FieldAccountID)
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *RequestDetailMutation) SetGroupID(i int64) {
+	m.group_id = &i
+	m.addgroup_id = nil
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *RequestDetailMutation) GroupID() (r int64, exists bool) {
+	v := m.group_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldGroupID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// AddGroupID adds i to the "group_id" field.
+func (m *RequestDetailMutation) AddGroupID(i int64) {
+	if m.addgroup_id != nil {
+		*m.addgroup_id += i
+	} else {
+		m.addgroup_id = &i
+	}
+}
+
+// AddedGroupID returns the value that was added to the "group_id" field in this mutation.
+func (m *RequestDetailMutation) AddedGroupID() (r int64, exists bool) {
+	v := m.addgroup_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearGroupID clears the value of the "group_id" field.
+func (m *RequestDetailMutation) ClearGroupID() {
+	m.group_id = nil
+	m.addgroup_id = nil
+	m.clearedFields[requestdetail.FieldGroupID] = struct{}{}
+}
+
+// GroupIDCleared returns if the "group_id" field was cleared in this mutation.
+func (m *RequestDetailMutation) GroupIDCleared() bool {
+	_, ok := m.clearedFields[requestdetail.FieldGroupID]
+	return ok
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *RequestDetailMutation) ResetGroupID() {
+	m.group_id = nil
+	m.addgroup_id = nil
+	delete(m.clearedFields, requestdetail.FieldGroupID)
+}
+
+// SetSubscriptionID sets the "subscription_id" field.
+func (m *RequestDetailMutation) SetSubscriptionID(i int64) {
+	m.subscription_id = &i
+	m.addsubscription_id = nil
+}
+
+// SubscriptionID returns the value of the "subscription_id" field in the mutation.
+func (m *RequestDetailMutation) SubscriptionID() (r int64, exists bool) {
+	v := m.subscription_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSubscriptionID returns the old "subscription_id" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldSubscriptionID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSubscriptionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSubscriptionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSubscriptionID: %w", err)
+	}
+	return oldValue.SubscriptionID, nil
+}
+
+// AddSubscriptionID adds i to the "subscription_id" field.
+func (m *RequestDetailMutation) AddSubscriptionID(i int64) {
+	if m.addsubscription_id != nil {
+		*m.addsubscription_id += i
+	} else {
+		m.addsubscription_id = &i
+	}
+}
+
+// AddedSubscriptionID returns the value that was added to the "subscription_id" field in this mutation.
+func (m *RequestDetailMutation) AddedSubscriptionID() (r int64, exists bool) {
+	v := m.addsubscription_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearSubscriptionID clears the value of the "subscription_id" field.
+func (m *RequestDetailMutation) ClearSubscriptionID() {
+	m.subscription_id = nil
+	m.addsubscription_id = nil
+	m.clearedFields[requestdetail.FieldSubscriptionID] = struct{}{}
+}
+
+// SubscriptionIDCleared returns if the "subscription_id" field was cleared in this mutation.
+func (m *RequestDetailMutation) SubscriptionIDCleared() bool {
+	_, ok := m.clearedFields[requestdetail.FieldSubscriptionID]
+	return ok
+}
+
+// ResetSubscriptionID resets all changes to the "subscription_id" field.
+func (m *RequestDetailMutation) ResetSubscriptionID() {
+	m.subscription_id = nil
+	m.addsubscription_id = nil
+	delete(m.clearedFields, requestdetail.FieldSubscriptionID)
+}
+
+// SetIPAddress sets the "ip_address" field.
+func (m *RequestDetailMutation) SetIPAddress(s string) {
+	m.ip_address = &s
+}
+
+// IPAddress returns the value of the "ip_address" field in the mutation.
+func (m *RequestDetailMutation) IPAddress() (r string, exists bool) {
+	v := m.ip_address
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIPAddress returns the old "ip_address" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldIPAddress(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIPAddress is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIPAddress requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIPAddress: %w", err)
+	}
+	return oldValue.IPAddress, nil
+}
+
+// ResetIPAddress resets all changes to the "ip_address" field.
+func (m *RequestDetailMutation) ResetIPAddress() {
+	m.ip_address = nil
+}
+
+// SetUserAgent sets the "user_agent" field.
+func (m *RequestDetailMutation) SetUserAgent(s string) {
+	m.user_agent = &s
+}
+
+// UserAgent returns the value of the "user_agent" field in the mutation.
+func (m *RequestDetailMutation) UserAgent() (r string, exists bool) {
+	v := m.user_agent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserAgent returns the old "user_agent" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldUserAgent(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserAgent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserAgent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserAgent: %w", err)
+	}
+	return oldValue.UserAgent, nil
+}
+
+// ResetUserAgent resets all changes to the "user_agent" field.
+func (m *RequestDetailMutation) ResetUserAgent() {
+	m.user_agent = nil
+}
+
+// SetRequestHeaders sets the "request_headers" field.
+func (m *RequestDetailMutation) SetRequestHeaders(value map[string][]string) {
+	m.request_headers = &value
+}
+
+// RequestHeaders returns the value of the "request_headers" field in the mutation.
+func (m *RequestDetailMutation) RequestHeaders() (r map[string][]string, exists bool) {
+	v := m.request_headers
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestHeaders returns the old "request_headers" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldRequestHeaders(ctx context.Context) (v map[string][]string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestHeaders is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestHeaders requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestHeaders: %w", err)
+	}
+	return oldValue.RequestHeaders, nil
+}
+
+// ResetRequestHeaders resets all changes to the "request_headers" field.
+func (m *RequestDetailMutation) ResetRequestHeaders() {
+	m.request_headers = nil
+}
+
+// SetResponseHeaders sets the "response_headers" field.
+func (m *RequestDetailMutation) SetResponseHeaders(value map[string][]string) {
+	m.response_headers = &value
+}
+
+// ResponseHeaders returns the value of the "response_headers" field in the mutation.
+func (m *RequestDetailMutation) ResponseHeaders() (r map[string][]string, exists bool) {
+	v := m.response_headers
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponseHeaders returns the old "response_headers" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldResponseHeaders(ctx context.Context) (v map[string][]string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponseHeaders is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponseHeaders requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponseHeaders: %w", err)
+	}
+	return oldValue.ResponseHeaders, nil
+}
+
+// ResetResponseHeaders resets all changes to the "response_headers" field.
+func (m *RequestDetailMutation) ResetResponseHeaders() {
+	m.response_headers = nil
+}
+
+// SetRequestBody sets the "request_body" field.
+func (m *RequestDetailMutation) SetRequestBody(s string) {
+	m.request_body = &s
+}
+
+// RequestBody returns the value of the "request_body" field in the mutation.
+func (m *RequestDetailMutation) RequestBody() (r string, exists bool) {
+	v := m.request_body
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestBody returns the old "request_body" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldRequestBody(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestBody is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestBody requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestBody: %w", err)
+	}
+	return oldValue.RequestBody, nil
+}
+
+// ResetRequestBody resets all changes to the "request_body" field.
+func (m *RequestDetailMutation) ResetRequestBody() {
+	m.request_body = nil
+}
+
+// SetUpstreamRequestBody sets the "upstream_request_body" field.
+func (m *RequestDetailMutation) SetUpstreamRequestBody(s string) {
+	m.upstream_request_body = &s
+}
+
+// UpstreamRequestBody returns the value of the "upstream_request_body" field in the mutation.
+func (m *RequestDetailMutation) UpstreamRequestBody() (r string, exists bool) {
+	v := m.upstream_request_body
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpstreamRequestBody returns the old "upstream_request_body" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldUpstreamRequestBody(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpstreamRequestBody is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpstreamRequestBody requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpstreamRequestBody: %w", err)
+	}
+	return oldValue.UpstreamRequestBody, nil
+}
+
+// ResetUpstreamRequestBody resets all changes to the "upstream_request_body" field.
+func (m *RequestDetailMutation) ResetUpstreamRequestBody() {
+	m.upstream_request_body = nil
+}
+
+// SetResponseBody sets the "response_body" field.
+func (m *RequestDetailMutation) SetResponseBody(s string) {
+	m.response_body = &s
+}
+
+// ResponseBody returns the value of the "response_body" field in the mutation.
+func (m *RequestDetailMutation) ResponseBody() (r string, exists bool) {
+	v := m.response_body
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponseBody returns the old "response_body" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldResponseBody(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponseBody is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponseBody requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponseBody: %w", err)
+	}
+	return oldValue.ResponseBody, nil
+}
+
+// ResetResponseBody resets all changes to the "response_body" field.
+func (m *RequestDetailMutation) ResetResponseBody() {
+	m.response_body = nil
+}
+
+// SetErrorMessage sets the "error_message" field.
+func (m *RequestDetailMutation) SetErrorMessage(s string) {
+	m.error_message = &s
+}
+
+// ErrorMessage returns the value of the "error_message" field in the mutation.
+func (m *RequestDetailMutation) ErrorMessage() (r string, exists bool) {
+	v := m.error_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorMessage returns the old "error_message" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldErrorMessage(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorMessage: %w", err)
+	}
+	return oldValue.ErrorMessage, nil
+}
+
+// ResetErrorMessage resets all changes to the "error_message" field.
+func (m *RequestDetailMutation) ResetErrorMessage() {
+	m.error_message = nil
+}
+
+// SetResponseTruncated sets the "response_truncated" field.
+func (m *RequestDetailMutation) SetResponseTruncated(b bool) {
+	m.response_truncated = &b
+}
+
+// ResponseTruncated returns the value of the "response_truncated" field in the mutation.
+func (m *RequestDetailMutation) ResponseTruncated() (r bool, exists bool) {
+	v := m.response_truncated
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponseTruncated returns the old "response_truncated" field's value of the RequestDetail entity.
+// If the RequestDetail object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailMutation) OldResponseTruncated(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponseTruncated is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponseTruncated requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponseTruncated: %w", err)
+	}
+	return oldValue.ResponseTruncated, nil
+}
+
+// ResetResponseTruncated resets all changes to the "response_truncated" field.
+func (m *RequestDetailMutation) ResetResponseTruncated() {
+	m.response_truncated = nil
+}
+
+// Where appends a list predicates to the RequestDetailMutation builder.
+func (m *RequestDetailMutation) Where(ps ...predicate.RequestDetail) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the RequestDetailMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RequestDetailMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RequestDetail, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *RequestDetailMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RequestDetailMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (RequestDetail).
+func (m *RequestDetailMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *RequestDetailMutation) Fields() []string {
+	fields := make([]string, 0, 26)
+	if m.request_id != nil {
+		fields = append(fields, requestdetail.FieldRequestID)
+	}
+	if m.created_at != nil {
+		fields = append(fields, requestdetail.FieldCreatedAt)
+	}
+	if m.completed_at != nil {
+		fields = append(fields, requestdetail.FieldCompletedAt)
+	}
+	if m.duration_ms != nil {
+		fields = append(fields, requestdetail.FieldDurationMs)
+	}
+	if m.status_code != nil {
+		fields = append(fields, requestdetail.FieldStatusCode)
+	}
+	if m.success != nil {
+		fields = append(fields, requestdetail.FieldSuccess)
+	}
+	if m.platform != nil {
+		fields = append(fields, requestdetail.FieldPlatform)
+	}
+	if m.endpoint != nil {
+		fields = append(fields, requestdetail.FieldEndpoint)
+	}
+	if m.upstream_endpoint != nil {
+		fields = append(fields, requestdetail.FieldUpstreamEndpoint)
+	}
+	if m.model != nil {
+		fields = append(fields, requestdetail.FieldModel)
+	}
+	if m.upstream_model != nil {
+		fields = append(fields, requestdetail.FieldUpstreamModel)
+	}
+	if m.stream != nil {
+		fields = append(fields, requestdetail.FieldStream)
+	}
+	if m.user_id != nil {
+		fields = append(fields, requestdetail.FieldUserID)
+	}
+	if m.api_key_id != nil {
+		fields = append(fields, requestdetail.FieldAPIKeyID)
+	}
+	if m.account_id != nil {
+		fields = append(fields, requestdetail.FieldAccountID)
+	}
+	if m.group_id != nil {
+		fields = append(fields, requestdetail.FieldGroupID)
+	}
+	if m.subscription_id != nil {
+		fields = append(fields, requestdetail.FieldSubscriptionID)
+	}
+	if m.ip_address != nil {
+		fields = append(fields, requestdetail.FieldIPAddress)
+	}
+	if m.user_agent != nil {
+		fields = append(fields, requestdetail.FieldUserAgent)
+	}
+	if m.request_headers != nil {
+		fields = append(fields, requestdetail.FieldRequestHeaders)
+	}
+	if m.response_headers != nil {
+		fields = append(fields, requestdetail.FieldResponseHeaders)
+	}
+	if m.request_body != nil {
+		fields = append(fields, requestdetail.FieldRequestBody)
+	}
+	if m.upstream_request_body != nil {
+		fields = append(fields, requestdetail.FieldUpstreamRequestBody)
+	}
+	if m.response_body != nil {
+		fields = append(fields, requestdetail.FieldResponseBody)
+	}
+	if m.error_message != nil {
+		fields = append(fields, requestdetail.FieldErrorMessage)
+	}
+	if m.response_truncated != nil {
+		fields = append(fields, requestdetail.FieldResponseTruncated)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *RequestDetailMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case requestdetail.FieldRequestID:
+		return m.RequestID()
+	case requestdetail.FieldCreatedAt:
+		return m.CreatedAt()
+	case requestdetail.FieldCompletedAt:
+		return m.CompletedAt()
+	case requestdetail.FieldDurationMs:
+		return m.DurationMs()
+	case requestdetail.FieldStatusCode:
+		return m.StatusCode()
+	case requestdetail.FieldSuccess:
+		return m.Success()
+	case requestdetail.FieldPlatform:
+		return m.Platform()
+	case requestdetail.FieldEndpoint:
+		return m.Endpoint()
+	case requestdetail.FieldUpstreamEndpoint:
+		return m.UpstreamEndpoint()
+	case requestdetail.FieldModel:
+		return m.Model()
+	case requestdetail.FieldUpstreamModel:
+		return m.UpstreamModel()
+	case requestdetail.FieldStream:
+		return m.Stream()
+	case requestdetail.FieldUserID:
+		return m.UserID()
+	case requestdetail.FieldAPIKeyID:
+		return m.APIKeyID()
+	case requestdetail.FieldAccountID:
+		return m.AccountID()
+	case requestdetail.FieldGroupID:
+		return m.GroupID()
+	case requestdetail.FieldSubscriptionID:
+		return m.SubscriptionID()
+	case requestdetail.FieldIPAddress:
+		return m.IPAddress()
+	case requestdetail.FieldUserAgent:
+		return m.UserAgent()
+	case requestdetail.FieldRequestHeaders:
+		return m.RequestHeaders()
+	case requestdetail.FieldResponseHeaders:
+		return m.ResponseHeaders()
+	case requestdetail.FieldRequestBody:
+		return m.RequestBody()
+	case requestdetail.FieldUpstreamRequestBody:
+		return m.UpstreamRequestBody()
+	case requestdetail.FieldResponseBody:
+		return m.ResponseBody()
+	case requestdetail.FieldErrorMessage:
+		return m.ErrorMessage()
+	case requestdetail.FieldResponseTruncated:
+		return m.ResponseTruncated()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *RequestDetailMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case requestdetail.FieldRequestID:
+		return m.OldRequestID(ctx)
+	case requestdetail.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case requestdetail.FieldCompletedAt:
+		return m.OldCompletedAt(ctx)
+	case requestdetail.FieldDurationMs:
+		return m.OldDurationMs(ctx)
+	case requestdetail.FieldStatusCode:
+		return m.OldStatusCode(ctx)
+	case requestdetail.FieldSuccess:
+		return m.OldSuccess(ctx)
+	case requestdetail.FieldPlatform:
+		return m.OldPlatform(ctx)
+	case requestdetail.FieldEndpoint:
+		return m.OldEndpoint(ctx)
+	case requestdetail.FieldUpstreamEndpoint:
+		return m.OldUpstreamEndpoint(ctx)
+	case requestdetail.FieldModel:
+		return m.OldModel(ctx)
+	case requestdetail.FieldUpstreamModel:
+		return m.OldUpstreamModel(ctx)
+	case requestdetail.FieldStream:
+		return m.OldStream(ctx)
+	case requestdetail.FieldUserID:
+		return m.OldUserID(ctx)
+	case requestdetail.FieldAPIKeyID:
+		return m.OldAPIKeyID(ctx)
+	case requestdetail.FieldAccountID:
+		return m.OldAccountID(ctx)
+	case requestdetail.FieldGroupID:
+		return m.OldGroupID(ctx)
+	case requestdetail.FieldSubscriptionID:
+		return m.OldSubscriptionID(ctx)
+	case requestdetail.FieldIPAddress:
+		return m.OldIPAddress(ctx)
+	case requestdetail.FieldUserAgent:
+		return m.OldUserAgent(ctx)
+	case requestdetail.FieldRequestHeaders:
+		return m.OldRequestHeaders(ctx)
+	case requestdetail.FieldResponseHeaders:
+		return m.OldResponseHeaders(ctx)
+	case requestdetail.FieldRequestBody:
+		return m.OldRequestBody(ctx)
+	case requestdetail.FieldUpstreamRequestBody:
+		return m.OldUpstreamRequestBody(ctx)
+	case requestdetail.FieldResponseBody:
+		return m.OldResponseBody(ctx)
+	case requestdetail.FieldErrorMessage:
+		return m.OldErrorMessage(ctx)
+	case requestdetail.FieldResponseTruncated:
+		return m.OldResponseTruncated(ctx)
+	}
+	return nil, fmt.Errorf("unknown RequestDetail field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RequestDetailMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case requestdetail.FieldRequestID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestID(v)
+		return nil
+	case requestdetail.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case requestdetail.FieldCompletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCompletedAt(v)
+		return nil
+	case requestdetail.FieldDurationMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDurationMs(v)
+		return nil
+	case requestdetail.FieldStatusCode:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatusCode(v)
+		return nil
+	case requestdetail.FieldSuccess:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSuccess(v)
+		return nil
+	case requestdetail.FieldPlatform:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlatform(v)
+		return nil
+	case requestdetail.FieldEndpoint:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEndpoint(v)
+		return nil
+	case requestdetail.FieldUpstreamEndpoint:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpstreamEndpoint(v)
+		return nil
+	case requestdetail.FieldModel:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetModel(v)
+		return nil
+	case requestdetail.FieldUpstreamModel:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpstreamModel(v)
+		return nil
+	case requestdetail.FieldStream:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStream(v)
+		return nil
+	case requestdetail.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case requestdetail.FieldAPIKeyID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyID(v)
+		return nil
+	case requestdetail.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountID(v)
+		return nil
+	case requestdetail.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case requestdetail.FieldSubscriptionID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSubscriptionID(v)
+		return nil
+	case requestdetail.FieldIPAddress:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIPAddress(v)
+		return nil
+	case requestdetail.FieldUserAgent:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserAgent(v)
+		return nil
+	case requestdetail.FieldRequestHeaders:
+		v, ok := value.(map[string][]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestHeaders(v)
+		return nil
+	case requestdetail.FieldResponseHeaders:
+		v, ok := value.(map[string][]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponseHeaders(v)
+		return nil
+	case requestdetail.FieldRequestBody:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestBody(v)
+		return nil
+	case requestdetail.FieldUpstreamRequestBody:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpstreamRequestBody(v)
+		return nil
+	case requestdetail.FieldResponseBody:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponseBody(v)
+		return nil
+	case requestdetail.FieldErrorMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorMessage(v)
+		return nil
+	case requestdetail.FieldResponseTruncated:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponseTruncated(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RequestDetail field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *RequestDetailMutation) AddedFields() []string {
+	var fields []string
+	if m.addduration_ms != nil {
+		fields = append(fields, requestdetail.FieldDurationMs)
+	}
+	if m.addstatus_code != nil {
+		fields = append(fields, requestdetail.FieldStatusCode)
+	}
+	if m.adduser_id != nil {
+		fields = append(fields, requestdetail.FieldUserID)
+	}
+	if m.addapi_key_id != nil {
+		fields = append(fields, requestdetail.FieldAPIKeyID)
+	}
+	if m.addaccount_id != nil {
+		fields = append(fields, requestdetail.FieldAccountID)
+	}
+	if m.addgroup_id != nil {
+		fields = append(fields, requestdetail.FieldGroupID)
+	}
+	if m.addsubscription_id != nil {
+		fields = append(fields, requestdetail.FieldSubscriptionID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *RequestDetailMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case requestdetail.FieldDurationMs:
+		return m.AddedDurationMs()
+	case requestdetail.FieldStatusCode:
+		return m.AddedStatusCode()
+	case requestdetail.FieldUserID:
+		return m.AddedUserID()
+	case requestdetail.FieldAPIKeyID:
+		return m.AddedAPIKeyID()
+	case requestdetail.FieldAccountID:
+		return m.AddedAccountID()
+	case requestdetail.FieldGroupID:
+		return m.AddedGroupID()
+	case requestdetail.FieldSubscriptionID:
+		return m.AddedSubscriptionID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RequestDetailMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case requestdetail.FieldDurationMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDurationMs(v)
+		return nil
+	case requestdetail.FieldStatusCode:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddStatusCode(v)
+		return nil
+	case requestdetail.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case requestdetail.FieldAPIKeyID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAPIKeyID(v)
+		return nil
+	case requestdetail.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAccountID(v)
+		return nil
+	case requestdetail.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGroupID(v)
+		return nil
+	case requestdetail.FieldSubscriptionID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSubscriptionID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RequestDetail numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *RequestDetailMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(requestdetail.FieldCompletedAt) {
+		fields = append(fields, requestdetail.FieldCompletedAt)
+	}
+	if m.FieldCleared(requestdetail.FieldDurationMs) {
+		fields = append(fields, requestdetail.FieldDurationMs)
+	}
+	if m.FieldCleared(requestdetail.FieldUserID) {
+		fields = append(fields, requestdetail.FieldUserID)
+	}
+	if m.FieldCleared(requestdetail.FieldAPIKeyID) {
+		fields = append(fields, requestdetail.FieldAPIKeyID)
+	}
+	if m.FieldCleared(requestdetail.FieldAccountID) {
+		fields = append(fields, requestdetail.FieldAccountID)
+	}
+	if m.FieldCleared(requestdetail.FieldGroupID) {
+		fields = append(fields, requestdetail.FieldGroupID)
+	}
+	if m.FieldCleared(requestdetail.FieldSubscriptionID) {
+		fields = append(fields, requestdetail.FieldSubscriptionID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *RequestDetailMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *RequestDetailMutation) ClearField(name string) error {
+	switch name {
+	case requestdetail.FieldCompletedAt:
+		m.ClearCompletedAt()
+		return nil
+	case requestdetail.FieldDurationMs:
+		m.ClearDurationMs()
+		return nil
+	case requestdetail.FieldUserID:
+		m.ClearUserID()
+		return nil
+	case requestdetail.FieldAPIKeyID:
+		m.ClearAPIKeyID()
+		return nil
+	case requestdetail.FieldAccountID:
+		m.ClearAccountID()
+		return nil
+	case requestdetail.FieldGroupID:
+		m.ClearGroupID()
+		return nil
+	case requestdetail.FieldSubscriptionID:
+		m.ClearSubscriptionID()
+		return nil
+	}
+	return fmt.Errorf("unknown RequestDetail nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *RequestDetailMutation) ResetField(name string) error {
+	switch name {
+	case requestdetail.FieldRequestID:
+		m.ResetRequestID()
+		return nil
+	case requestdetail.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case requestdetail.FieldCompletedAt:
+		m.ResetCompletedAt()
+		return nil
+	case requestdetail.FieldDurationMs:
+		m.ResetDurationMs()
+		return nil
+	case requestdetail.FieldStatusCode:
+		m.ResetStatusCode()
+		return nil
+	case requestdetail.FieldSuccess:
+		m.ResetSuccess()
+		return nil
+	case requestdetail.FieldPlatform:
+		m.ResetPlatform()
+		return nil
+	case requestdetail.FieldEndpoint:
+		m.ResetEndpoint()
+		return nil
+	case requestdetail.FieldUpstreamEndpoint:
+		m.ResetUpstreamEndpoint()
+		return nil
+	case requestdetail.FieldModel:
+		m.ResetModel()
+		return nil
+	case requestdetail.FieldUpstreamModel:
+		m.ResetUpstreamModel()
+		return nil
+	case requestdetail.FieldStream:
+		m.ResetStream()
+		return nil
+	case requestdetail.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case requestdetail.FieldAPIKeyID:
+		m.ResetAPIKeyID()
+		return nil
+	case requestdetail.FieldAccountID:
+		m.ResetAccountID()
+		return nil
+	case requestdetail.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case requestdetail.FieldSubscriptionID:
+		m.ResetSubscriptionID()
+		return nil
+	case requestdetail.FieldIPAddress:
+		m.ResetIPAddress()
+		return nil
+	case requestdetail.FieldUserAgent:
+		m.ResetUserAgent()
+		return nil
+	case requestdetail.FieldRequestHeaders:
+		m.ResetRequestHeaders()
+		return nil
+	case requestdetail.FieldResponseHeaders:
+		m.ResetResponseHeaders()
+		return nil
+	case requestdetail.FieldRequestBody:
+		m.ResetRequestBody()
+		return nil
+	case requestdetail.FieldUpstreamRequestBody:
+		m.ResetUpstreamRequestBody()
+		return nil
+	case requestdetail.FieldResponseBody:
+		m.ResetResponseBody()
+		return nil
+	case requestdetail.FieldErrorMessage:
+		m.ResetErrorMessage()
+		return nil
+	case requestdetail.FieldResponseTruncated:
+		m.ResetResponseTruncated()
+		return nil
+	}
+	return fmt.Errorf("unknown RequestDetail field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *RequestDetailMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *RequestDetailMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *RequestDetailMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *RequestDetailMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *RequestDetailMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *RequestDetailMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *RequestDetailMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown RequestDetail unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *RequestDetailMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown RequestDetail edge %s", name)
 }
 
 // SecuritySecretMutation represents an operation that mutates the SecuritySecret nodes in the graph.

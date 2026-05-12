@@ -1161,6 +1161,79 @@ var (
 			},
 		},
 	}
+	// RequestDetailsColumns holds the columns for the "request_details" table.
+	RequestDetailsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "request_id", Type: field.TypeString, Unique: true, Size: 64},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "completed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "duration_ms", Type: field.TypeInt, Nullable: true},
+		{Name: "status_code", Type: field.TypeInt, Default: 0},
+		{Name: "success", Type: field.TypeBool, Default: false},
+		{Name: "platform", Type: field.TypeString, Size: 32, Default: ""},
+		{Name: "endpoint", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "upstream_endpoint", Type: field.TypeString, Size: 1024, Default: ""},
+		{Name: "model", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "upstream_model", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "stream", Type: field.TypeBool, Default: false},
+		{Name: "user_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "api_key_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "account_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "group_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "subscription_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "ip_address", Type: field.TypeString, Size: 45, Default: ""},
+		{Name: "user_agent", Type: field.TypeString, Size: 512, Default: ""},
+		{Name: "request_headers", Type: field.TypeJSON, Default: schema.Expr("'{}'::jsonb")},
+		{Name: "response_headers", Type: field.TypeJSON, Default: schema.Expr("'{}'::jsonb")},
+		{Name: "request_body", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "upstream_request_body", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "response_body", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "error_message", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "response_truncated", Type: field.TypeBool, Default: false},
+	}
+	// RequestDetailsTable holds the schema information for the "request_details" table.
+	RequestDetailsTable = &schema.Table{
+		Name:       "request_details",
+		Columns:    RequestDetailsColumns,
+		PrimaryKey: []*schema.Column{RequestDetailsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_request_details_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{RequestDetailsColumns[2]},
+			},
+			{
+				Name:    "idx_request_details_user_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{RequestDetailsColumns[13], RequestDetailsColumns[2]},
+			},
+			{
+				Name:    "idx_request_details_api_key_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{RequestDetailsColumns[14], RequestDetailsColumns[2]},
+			},
+			{
+				Name:    "idx_request_details_account_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{RequestDetailsColumns[15], RequestDetailsColumns[2]},
+			},
+			{
+				Name:    "idx_request_details_model_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{RequestDetailsColumns[10], RequestDetailsColumns[2]},
+			},
+			{
+				Name:    "idx_request_details_platform_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{RequestDetailsColumns[7], RequestDetailsColumns[2]},
+			},
+			{
+				Name:    "idx_request_details_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{RequestDetailsColumns[5], RequestDetailsColumns[2]},
+			},
+		},
+	}
 	// SecuritySecretsColumns holds the columns for the "security_secrets" table.
 	SecuritySecretsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -1704,6 +1777,7 @@ var (
 		PromoCodeUsagesTable,
 		ProxiesTable,
 		RedeemCodesTable,
+		RequestDetailsTable,
 		SecuritySecretsTable,
 		SettingsTable,
 		SubscriptionPlansTable,
@@ -1807,6 +1881,9 @@ func init() {
 	RedeemCodesTable.ForeignKeys[1].RefTable = UsersTable
 	RedeemCodesTable.Annotation = &entsql.Annotation{
 		Table: "redeem_codes",
+	}
+	RequestDetailsTable.Annotation = &entsql.Annotation{
+		Table: "request_details",
 	}
 	SecuritySecretsTable.Annotation = &entsql.Annotation{
 		Table: "security_secrets",

@@ -28,6 +28,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
+	"github.com/Wei-Shaw/sub2api/ent/requestdetail"
 	"github.com/Wei-Shaw/sub2api/ent/schema"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
@@ -1389,6 +1390,112 @@ func init() {
 	redeemcodeDescValidityDays := redeemcodeFields[9].Descriptor()
 	// redeemcode.DefaultValidityDays holds the default value on creation for the validity_days field.
 	redeemcode.DefaultValidityDays = redeemcodeDescValidityDays.Default.(int)
+	requestdetailFields := schema.RequestDetail{}.Fields()
+	_ = requestdetailFields
+	// requestdetailDescRequestID is the schema descriptor for request_id field.
+	requestdetailDescRequestID := requestdetailFields[0].Descriptor()
+	// requestdetail.RequestIDValidator is a validator for the "request_id" field. It is called by the builders before save.
+	requestdetail.RequestIDValidator = func() func(string) error {
+		validators := requestdetailDescRequestID.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(request_id string) error {
+			for _, fn := range fns {
+				if err := fn(request_id); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// requestdetailDescCreatedAt is the schema descriptor for created_at field.
+	requestdetailDescCreatedAt := requestdetailFields[1].Descriptor()
+	// requestdetail.DefaultCreatedAt holds the default value on creation for the created_at field.
+	requestdetail.DefaultCreatedAt = requestdetailDescCreatedAt.Default.(func() time.Time)
+	// requestdetailDescStatusCode is the schema descriptor for status_code field.
+	requestdetailDescStatusCode := requestdetailFields[4].Descriptor()
+	// requestdetail.DefaultStatusCode holds the default value on creation for the status_code field.
+	requestdetail.DefaultStatusCode = requestdetailDescStatusCode.Default.(int)
+	// requestdetailDescSuccess is the schema descriptor for success field.
+	requestdetailDescSuccess := requestdetailFields[5].Descriptor()
+	// requestdetail.DefaultSuccess holds the default value on creation for the success field.
+	requestdetail.DefaultSuccess = requestdetailDescSuccess.Default.(bool)
+	// requestdetailDescPlatform is the schema descriptor for platform field.
+	requestdetailDescPlatform := requestdetailFields[6].Descriptor()
+	// requestdetail.DefaultPlatform holds the default value on creation for the platform field.
+	requestdetail.DefaultPlatform = requestdetailDescPlatform.Default.(string)
+	// requestdetail.PlatformValidator is a validator for the "platform" field. It is called by the builders before save.
+	requestdetail.PlatformValidator = requestdetailDescPlatform.Validators[0].(func(string) error)
+	// requestdetailDescEndpoint is the schema descriptor for endpoint field.
+	requestdetailDescEndpoint := requestdetailFields[7].Descriptor()
+	// requestdetail.DefaultEndpoint holds the default value on creation for the endpoint field.
+	requestdetail.DefaultEndpoint = requestdetailDescEndpoint.Default.(string)
+	// requestdetail.EndpointValidator is a validator for the "endpoint" field. It is called by the builders before save.
+	requestdetail.EndpointValidator = requestdetailDescEndpoint.Validators[0].(func(string) error)
+	// requestdetailDescUpstreamEndpoint is the schema descriptor for upstream_endpoint field.
+	requestdetailDescUpstreamEndpoint := requestdetailFields[8].Descriptor()
+	// requestdetail.DefaultUpstreamEndpoint holds the default value on creation for the upstream_endpoint field.
+	requestdetail.DefaultUpstreamEndpoint = requestdetailDescUpstreamEndpoint.Default.(string)
+	// requestdetail.UpstreamEndpointValidator is a validator for the "upstream_endpoint" field. It is called by the builders before save.
+	requestdetail.UpstreamEndpointValidator = requestdetailDescUpstreamEndpoint.Validators[0].(func(string) error)
+	// requestdetailDescModel is the schema descriptor for model field.
+	requestdetailDescModel := requestdetailFields[9].Descriptor()
+	// requestdetail.DefaultModel holds the default value on creation for the model field.
+	requestdetail.DefaultModel = requestdetailDescModel.Default.(string)
+	// requestdetail.ModelValidator is a validator for the "model" field. It is called by the builders before save.
+	requestdetail.ModelValidator = requestdetailDescModel.Validators[0].(func(string) error)
+	// requestdetailDescUpstreamModel is the schema descriptor for upstream_model field.
+	requestdetailDescUpstreamModel := requestdetailFields[10].Descriptor()
+	// requestdetail.DefaultUpstreamModel holds the default value on creation for the upstream_model field.
+	requestdetail.DefaultUpstreamModel = requestdetailDescUpstreamModel.Default.(string)
+	// requestdetail.UpstreamModelValidator is a validator for the "upstream_model" field. It is called by the builders before save.
+	requestdetail.UpstreamModelValidator = requestdetailDescUpstreamModel.Validators[0].(func(string) error)
+	// requestdetailDescStream is the schema descriptor for stream field.
+	requestdetailDescStream := requestdetailFields[11].Descriptor()
+	// requestdetail.DefaultStream holds the default value on creation for the stream field.
+	requestdetail.DefaultStream = requestdetailDescStream.Default.(bool)
+	// requestdetailDescIPAddress is the schema descriptor for ip_address field.
+	requestdetailDescIPAddress := requestdetailFields[17].Descriptor()
+	// requestdetail.DefaultIPAddress holds the default value on creation for the ip_address field.
+	requestdetail.DefaultIPAddress = requestdetailDescIPAddress.Default.(string)
+	// requestdetail.IPAddressValidator is a validator for the "ip_address" field. It is called by the builders before save.
+	requestdetail.IPAddressValidator = requestdetailDescIPAddress.Validators[0].(func(string) error)
+	// requestdetailDescUserAgent is the schema descriptor for user_agent field.
+	requestdetailDescUserAgent := requestdetailFields[18].Descriptor()
+	// requestdetail.DefaultUserAgent holds the default value on creation for the user_agent field.
+	requestdetail.DefaultUserAgent = requestdetailDescUserAgent.Default.(string)
+	// requestdetail.UserAgentValidator is a validator for the "user_agent" field. It is called by the builders before save.
+	requestdetail.UserAgentValidator = requestdetailDescUserAgent.Validators[0].(func(string) error)
+	// requestdetailDescRequestHeaders is the schema descriptor for request_headers field.
+	requestdetailDescRequestHeaders := requestdetailFields[19].Descriptor()
+	// requestdetail.DefaultRequestHeaders holds the default value on creation for the request_headers field.
+	requestdetail.DefaultRequestHeaders = requestdetailDescRequestHeaders.Default.(map[string][]string)
+	// requestdetailDescResponseHeaders is the schema descriptor for response_headers field.
+	requestdetailDescResponseHeaders := requestdetailFields[20].Descriptor()
+	// requestdetail.DefaultResponseHeaders holds the default value on creation for the response_headers field.
+	requestdetail.DefaultResponseHeaders = requestdetailDescResponseHeaders.Default.(map[string][]string)
+	// requestdetailDescRequestBody is the schema descriptor for request_body field.
+	requestdetailDescRequestBody := requestdetailFields[21].Descriptor()
+	// requestdetail.DefaultRequestBody holds the default value on creation for the request_body field.
+	requestdetail.DefaultRequestBody = requestdetailDescRequestBody.Default.(string)
+	// requestdetailDescUpstreamRequestBody is the schema descriptor for upstream_request_body field.
+	requestdetailDescUpstreamRequestBody := requestdetailFields[22].Descriptor()
+	// requestdetail.DefaultUpstreamRequestBody holds the default value on creation for the upstream_request_body field.
+	requestdetail.DefaultUpstreamRequestBody = requestdetailDescUpstreamRequestBody.Default.(string)
+	// requestdetailDescResponseBody is the schema descriptor for response_body field.
+	requestdetailDescResponseBody := requestdetailFields[23].Descriptor()
+	// requestdetail.DefaultResponseBody holds the default value on creation for the response_body field.
+	requestdetail.DefaultResponseBody = requestdetailDescResponseBody.Default.(string)
+	// requestdetailDescErrorMessage is the schema descriptor for error_message field.
+	requestdetailDescErrorMessage := requestdetailFields[24].Descriptor()
+	// requestdetail.DefaultErrorMessage holds the default value on creation for the error_message field.
+	requestdetail.DefaultErrorMessage = requestdetailDescErrorMessage.Default.(string)
+	// requestdetailDescResponseTruncated is the schema descriptor for response_truncated field.
+	requestdetailDescResponseTruncated := requestdetailFields[25].Descriptor()
+	// requestdetail.DefaultResponseTruncated holds the default value on creation for the response_truncated field.
+	requestdetail.DefaultResponseTruncated = requestdetailDescResponseTruncated.Default.(bool)
 	securitysecretMixin := schema.SecuritySecret{}.Mixin()
 	securitysecretMixinFields0 := securitysecretMixin[0].Fields()
 	_ = securitysecretMixinFields0
