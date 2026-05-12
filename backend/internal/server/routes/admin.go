@@ -71,6 +71,9 @@ func RegisterAdminRoutes(
 		// 使用记录管理
 		registerUsageRoutes(admin, h)
 
+		// 请求详情管理
+		registerRequestDetailRoutes(admin, h)
+
 		// 用户属性管理
 		registerUserAttributeRoutes(admin, h)
 
@@ -97,6 +100,15 @@ func RegisterAdminRoutes(
 
 		// 邀请返利（专属用户管理）
 		registerAffiliateRoutes(admin, h)
+	}
+}
+
+func registerRequestDetailRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	requestDetails := admin.Group("/request-details")
+	{
+		requestDetails.GET("", h.Admin.RequestDetail.List)
+		requestDetails.GET("/export", h.Admin.RequestDetail.Export)
+		requestDetails.GET("/:id", h.Admin.RequestDetail.Get)
 	}
 }
 

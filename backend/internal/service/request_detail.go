@@ -138,6 +138,13 @@ func (s *RequestDetailService) GetByID(ctx context.Context, id int64) (*RequestD
 	return s.repo.GetByID(ctx, id)
 }
 
+func (s *RequestDetailService) StreamAll(ctx context.Context, filters RequestDetailFilters, write func(RequestDetail) error) error {
+	if s == nil || s.repo == nil {
+		return nil
+	}
+	return s.repo.StreamAll(ctx, filters, write)
+}
+
 func (s *RequestDetailService) WriteBackupNDJSON(ctx context.Context, filters RequestDetailFilters, w io.Writer) error {
 	enc := json.NewEncoder(w)
 	return s.repo.StreamAll(ctx, filters, func(detail RequestDetail) error {
