@@ -764,7 +764,8 @@ const adminNavItems = computed((): NavItem[] => {
         { path: '/admin/orders/plans', label: t('nav.paymentPlans'), icon: CreditCardIcon },
       ],
     },
-    { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon }
+    { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon },
+    { path: '/admin/request-details', label: t('nav.requestDetails'), icon: ChartIcon }
   ]
 
   const visible = applyFeatureFlags(baseItems)

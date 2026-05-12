@@ -553,6 +553,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/request-details',
+    name: 'AdminRequestDetails',
+    component: () => import('@/views/admin/RequestDetailsView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Request Details',
+      titleKey: 'admin.requestDetails.title',
+      descriptionKey: 'admin.requestDetails.description'
+    }
+  },
+  {
     path: '/admin/affiliates',
     redirect: '/admin/affiliates/invites'
   },

@@ -345,6 +345,7 @@ export default {
     announcements: 'Announcements',
     apiKeys: 'API Keys',
     usage: 'Usage',
+    requestDetails: 'Request Details',
     redeem: 'Redeem',
     affiliate: 'Affiliate Rebates',
     affiliateManagement: 'Affiliate Rebates',
