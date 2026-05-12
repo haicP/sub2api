@@ -60,6 +60,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 
+	setRequestDetailRequestBody(c, body)
 	setOpsRequestContext(c, "", false, body)
 
 	// Validate JSON
@@ -80,6 +81,17 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 
 	setOpsRequestContext(c, reqModel, reqStream, body)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(reqStream, false)))
+	setRequestDetailContext(c, service.RequestDetailContext{
+		Platform:  service.PlatformAnthropic,
+		Endpoint:  c.FullPath(),
+		Model:     reqModel,
+		Stream:    reqStream,
+		UserID:    subject.UserID,
+		APIKeyID:  apiKey.ID,
+		GroupID:   apiKey.GroupID,
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	})
 
 	// 解析渠道级模型映射
 	channelMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)

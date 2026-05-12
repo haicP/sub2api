@@ -150,6 +150,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 		return
 	}
 
+	setRequestDetailRequestBody(c, body)
 	setOpsRequestContext(c, "", false, body)
 
 	parsedReq, err := service.ParseGatewayRequest(body, domain.PlatformAnthropic)
@@ -185,6 +186,17 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 
 	setOpsRequestContext(c, reqModel, reqStream, body)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(reqStream, false)))
+	setRequestDetailContext(c, service.RequestDetailContext{
+		Platform:  service.PlatformAnthropic,
+		Endpoint:  c.FullPath(),
+		Model:     reqModel,
+		Stream:    reqStream,
+		UserID:    subject.UserID,
+		APIKeyID:  apiKey.ID,
+		GroupID:   apiKey.GroupID,
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	})
 
 	// 验证 model 必填
 	if reqModel == "" {
@@ -1494,6 +1506,7 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 		return
 	}
 
+	setRequestDetailRequestBody(c, body)
 	setOpsRequestContext(c, "", false, body)
 
 	parsedReq, err := service.ParseGatewayRequest(body, domain.PlatformAnthropic)
@@ -1515,6 +1528,17 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 
 	setOpsRequestContext(c, parsedReq.Model, parsedReq.Stream, body)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(parsedReq.Stream, false)))
+	setRequestDetailContext(c, service.RequestDetailContext{
+		Platform:  service.PlatformAnthropic,
+		Endpoint:  c.FullPath(),
+		Model:     parsedReq.Model,
+		Stream:    parsedReq.Stream,
+		UserID:    apiKey.UserID,
+		APIKeyID:  apiKey.ID,
+		GroupID:   apiKey.GroupID,
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	})
 
 	// 获取订阅信息（可能为nil）
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)

@@ -2463,6 +2463,13 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 
 	// Capture upstream request body for ops retry of this attempt.
 	setOpsUpstreamRequestBody(c, body)
+	if cap, ok := GetRequestDetailCapture(c); ok {
+		cap.SetUpstreamRequestBody(body)
+		cap.SetContext(RequestDetailContext{
+			AccountID:     account.ID,
+			UpstreamModel: upstreamModel,
+		})
+	}
 
 	// 命中 WS 时仅走 WebSocket Mode；不再自动回退 HTTP。
 	if wsDecision.Transport == OpenAIUpstreamTransportResponsesWebsocketV2 {
@@ -2736,6 +2743,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 						return nil, fmt.Errorf("serialize invalid_encrypted_content retry body: %w", err)
 					}
 					setOpsUpstreamRequestBody(c, body)
+					if cap, ok := GetRequestDetailCapture(c); ok {
+						cap.SetUpstreamRequestBody(body)
+					}
 					httpInvalidEncryptedContentRetryTried = true
 					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying non-WSv2 request once after invalid_encrypted_content (account: %s)", account.Name)
 					continue
@@ -2985,6 +2995,12 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	}
 
 	setOpsUpstreamRequestBody(c, body)
+	if cap, ok := GetRequestDetailCapture(c); ok {
+		cap.SetUpstreamRequestBody(body)
+		cap.SetContext(RequestDetailContext{
+			AccountID: account.ID,
+		})
+	}
 	if c != nil {
 		c.Set("openai_passthrough", true)
 	}

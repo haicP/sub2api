@@ -182,8 +182,20 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		return
 	}
 
+	setRequestDetailRequestBody(c, body)
 	setOpsRequestContext(c, modelName, stream, body)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(stream, false)))
+	setRequestDetailContext(c, service.RequestDetailContext{
+		Platform:  service.PlatformGemini,
+		Endpoint:  c.FullPath(),
+		Model:     modelName,
+		Stream:    stream,
+		UserID:    authSubject.UserID,
+		APIKeyID:  apiKey.ID,
+		GroupID:   apiKey.GroupID,
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	})
 
 	if decision := h.checkContentModeration(c, reqLog, apiKey, authSubject, service.ContentModerationProtocolGemini, modelName, body); decision != nil && decision.Blocked {
 		googleError(c, contentModerationStatus(decision), decision.Message)

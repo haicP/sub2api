@@ -62,6 +62,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		return
 	}
 
+	setRequestDetailRequestBody(c, body)
 	if isMultipartImagesContentType(c.GetHeader("Content-Type")) {
 		setOpsRequestContext(c, "", false, nil)
 	} else {
@@ -103,6 +104,17 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		setOpsRequestContext(c, parsed.Model, parsed.Stream, body)
 	}
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(parsed.Stream, false)))
+	setRequestDetailContext(c, service.RequestDetailContext{
+		Platform:  service.PlatformOpenAI,
+		Endpoint:  c.FullPath(),
+		Model:     parsed.Model,
+		Stream:    parsed.Stream,
+		UserID:    subject.UserID,
+		APIKeyID:  apiKey.ID,
+		GroupID:   apiKey.GroupID,
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	})
 
 	channelMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, parsed.Model)
 

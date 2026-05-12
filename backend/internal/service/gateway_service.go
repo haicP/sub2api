@@ -4523,6 +4523,13 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 
 	// 重试间复用同一请求体，避免每次 string(body) 产生额外分配。
 	setOpsUpstreamRequestBody(c, body)
+	if cap, ok := GetRequestDetailCapture(c); ok {
+		cap.SetUpstreamRequestBody(body)
+		cap.SetContext(RequestDetailContext{
+			AccountID:     account.ID,
+			UpstreamModel: reqModel,
+		})
+	}
 
 	// 重试循环
 	var resp *http.Response
@@ -5016,6 +5023,13 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 
 	// 重试间复用同一请求体，避免每次 string(body) 产生额外分配。
 	setOpsUpstreamRequestBody(c, input.Body)
+	if cap, ok := GetRequestDetailCapture(c); ok {
+		cap.SetUpstreamRequestBody(input.Body)
+		cap.SetContext(RequestDetailContext{
+			AccountID:     account.ID,
+			UpstreamModel: input.RequestModel,
+		})
+	}
 
 	var resp *http.Response
 	retryStart := time.Now()
@@ -6166,6 +6180,14 @@ func (s *GatewayService) buildUpstreamRequestAnthropicVertex(
 	fullURL, err := buildVertexAnthropicURL(account.VertexProjectID(), account.VertexLocation(modelID), modelID, reqStream)
 	if err != nil {
 		return nil, err
+	}
+	if cap, ok := GetRequestDetailCapture(c); ok {
+		cap.SetUpstreamRequestBody(vertexBody)
+		cap.SetContext(RequestDetailContext{
+			AccountID:        account.ID,
+			UpstreamEndpoint: safeUpstreamURL(fullURL),
+			UpstreamModel:    modelID,
+		})
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(vertexBody))
 	if err != nil {
