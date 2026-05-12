@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 )
 
@@ -72,11 +74,50 @@ type RequestDetailRepository interface {
 }
 
 type RequestDetailService struct {
-	repo RequestDetailRepository
+	repo    RequestDetailRepository
+	queue   chan *RequestDetail
+	stopCh  chan struct{}
+	doneCh  chan struct{}
+	started atomic.Bool
+	stopped atomic.Bool
 }
 
 func NewRequestDetailService(repo RequestDetailRepository) *RequestDetailService {
-	return &RequestDetailService{repo: repo}
+	return &RequestDetailService{
+		repo:   repo,
+		queue:  make(chan *RequestDetail, 1024),
+		stopCh: make(chan struct{}),
+		doneCh: make(chan struct{}),
+	}
+}
+
+func (s *RequestDetailService) Start() {
+	if s == nil || !s.started.CompareAndSwap(false, true) {
+		return
+	}
+	s.stopped.Store(false)
+	go s.run()
+}
+
+func (s *RequestDetailService) Stop() {
+	if s == nil || !s.started.CompareAndSwap(true, false) {
+		return
+	}
+	s.stopped.Store(true)
+	close(s.stopCh)
+	<-s.doneCh
+}
+
+func (s *RequestDetailService) Enqueue(detail *RequestDetail) bool {
+	if s == nil || detail == nil || s.stopped.Load() {
+		return false
+	}
+	select {
+	case s.queue <- detail:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *RequestDetailService) Create(ctx context.Context, detail *RequestDetail) error {
@@ -102,4 +143,38 @@ func (s *RequestDetailService) WriteBackupNDJSON(ctx context.Context, filters Re
 	return s.repo.StreamAll(ctx, filters, func(detail RequestDetail) error {
 		return enc.Encode(detail)
 	})
+}
+
+func (s *RequestDetailService) run() {
+	defer close(s.doneCh)
+	for {
+		select {
+		case detail, ok := <-s.queue:
+			if !ok {
+				return
+			}
+			s.persist(detail)
+		case <-s.stopCh:
+			for {
+				select {
+				case detail, ok := <-s.queue:
+					if !ok {
+						return
+					}
+					s.persist(detail)
+				default:
+					return
+				}
+			}
+		}
+	}
+}
+
+func (s *RequestDetailService) persist(detail *RequestDetail) {
+	if s == nil || s.repo == nil || detail == nil {
+		return
+	}
+	if err := s.repo.Create(context.Background(), detail); err != nil {
+		logger.LegacyPrintf("service.request_detail", "persist request detail failed request_id=%s err=%v", detail.RequestID, err)
+	}
 }

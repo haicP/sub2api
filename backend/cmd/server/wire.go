@@ -87,6 +87,7 @@ func provideCleanup(
 	pricing *service.PricingService,
 	emailQueue *service.EmailQueueService,
 	billingCache *service.BillingCacheService,
+	requestDetailService *service.RequestDetailService,
 	usageRecordWorkerPool *service.UsageRecordWorkerPool,
 	subscriptionService *service.SubscriptionService,
 	oauth *service.OAuthService,
@@ -192,6 +193,12 @@ func provideCleanup(
 			}},
 			{"BillingCacheService", func() error {
 				billingCache.Stop()
+				return nil
+			}},
+			{"RequestDetailService", func() error {
+				if requestDetailService != nil {
+					requestDetailService.Stop()
+				}
 				return nil
 			}},
 			{"UsageRecordWorkerPool", func() error {

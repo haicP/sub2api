@@ -83,10 +83,16 @@ func (RequestDetail) Fields() []ent.Field {
 			Default(""),
 		field.JSON("request_headers", map[string][]string{}).
 			Default(map[string][]string{}).
-			Annotations(entsql.DefaultExpr("'{}'::jsonb")),
+			Annotations(entsql.DefaultExprs(map[string]string{
+				dialect.Postgres: "'{}'::jsonb",
+				dialect.SQLite:   "'{}'",
+			})),
 		field.JSON("response_headers", map[string][]string{}).
 			Default(map[string][]string{}).
-			Annotations(entsql.DefaultExpr("'{}'::jsonb")),
+			Annotations(entsql.DefaultExprs(map[string]string{
+				dialect.Postgres: "'{}'::jsonb",
+				dialect.SQLite:   "'{}'",
+			})),
 		field.String("request_body").
 			Default("").
 			SchemaType(map[string]string{dialect.Postgres: "text"}),

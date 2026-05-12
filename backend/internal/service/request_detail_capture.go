@@ -7,7 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 const ginContextKeyRequestDetailCapture = "request_detail_capture"
@@ -248,4 +251,24 @@ func cloneHeaderMap(header map[string][]string) map[string][]string {
 		out[key] = copied
 	}
 	return out
+}
+
+func RequestDetailMiddleware(svc *RequestDetailService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		requestID, _ := c.Request.Context().Value(ctxkey.RequestID).(string)
+		requestID = strings.TrimSpace(requestID)
+		if requestID == "" {
+			requestID = uuid.NewString()
+		}
+		capture := NewRequestDetailCapture(c, requestID)
+		PutRequestDetailCapture(c, capture)
+		c.Writer = capture.WrapWriter(c.Writer)
+
+		c.Next()
+
+		detail := capture.Finish(strings.Join(c.Errors.Errors(), "; "))
+		if svc != nil && !svc.Enqueue(detail) {
+			logger.LegacyPrintf("service.request_detail", "request detail queue full request_id=%s", detail.RequestID)
+		}
+	}
 }

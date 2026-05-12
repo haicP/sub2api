@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
@@ -547,6 +548,18 @@ func (_c *RequestDetailCreate) check() error {
 	if v, ok := _c.mutation.UserAgent(); ok {
 		if err := requestdetail.UserAgentValidator(v); err != nil {
 			return &ValidationError{Name: "user_agent", err: fmt.Errorf(`ent: validator failed for field "RequestDetail.user_agent": %w`, err)}
+		}
+	}
+	switch _c.driver.Dialect() {
+	case dialect.MySQL, dialect.SQLite:
+		if _, ok := _c.mutation.RequestHeaders(); !ok {
+			return &ValidationError{Name: "request_headers", err: errors.New(`ent: missing required field "RequestDetail.request_headers"`)}
+		}
+	}
+	switch _c.driver.Dialect() {
+	case dialect.MySQL, dialect.SQLite:
+		if _, ok := _c.mutation.ResponseHeaders(); !ok {
+			return &ValidationError{Name: "response_headers", err: errors.New(`ent: missing required field "RequestDetail.response_headers"`)}
 		}
 	}
 	if _, ok := _c.mutation.RequestBody(); !ok {
