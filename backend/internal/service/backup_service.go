@@ -303,6 +303,21 @@ func (s *BackupService) TestS3Connection(ctx context.Context, cfg BackupS3Config
 	return store.HeadBucket(ctx)
 }
 
+func (s *BackupService) NewConfiguredObjectStore(ctx context.Context) (BackupObjectStore, *BackupS3Config, error) {
+	cfg, err := s.loadS3Config(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	if cfg == nil || !cfg.IsConfigured() {
+		return nil, nil, ErrBackupS3NotConfigured
+	}
+	store, err := s.getOrCreateStore(ctx, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	return store, cfg, nil
+}
+
 // ─── 定时备份管理 ───
 
 func (s *BackupService) GetSchedule(ctx context.Context) (*BackupScheduleConfig, error) {

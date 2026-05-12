@@ -108,6 +108,12 @@ func registerRequestDetailRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		requestDetails.GET("", h.Admin.RequestDetail.List)
 		requestDetails.GET("/export", h.Admin.RequestDetail.Export)
+		requestDetails.GET("/backup-schedule", h.Admin.RequestDetail.GetBackupSchedule)
+		requestDetails.PUT("/backup-schedule", h.Admin.RequestDetail.UpdateBackupSchedule)
+		requestDetails.POST("/backups", h.Admin.RequestDetail.CreateBackup)
+		requestDetails.GET("/backups", h.Admin.RequestDetail.ListBackups)
+		requestDetails.GET("/backups/:id/download-url", h.Admin.RequestDetail.GetBackupDownloadURL)
+		requestDetails.GET("/backups/:id", h.Admin.RequestDetail.GetBackup)
 		requestDetails.GET("/:id", h.Admin.RequestDetail.Get)
 	}
 }

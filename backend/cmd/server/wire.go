@@ -88,6 +88,7 @@ func provideCleanup(
 	emailQueue *service.EmailQueueService,
 	billingCache *service.BillingCacheService,
 	requestDetailService *service.RequestDetailService,
+	requestDetailBackupService *service.RequestDetailBackupService,
 	usageRecordWorkerPool *service.UsageRecordWorkerPool,
 	subscriptionService *service.SubscriptionService,
 	oauth *service.OAuthService,
@@ -198,6 +199,12 @@ func provideCleanup(
 			{"RequestDetailService", func() error {
 				if requestDetailService != nil {
 					requestDetailService.Stop()
+				}
+				return nil
+			}},
+			{"RequestDetailBackupService", func() error {
+				if requestDetailBackupService != nil {
+					requestDetailBackupService.Stop()
 				}
 				return nil
 			}},

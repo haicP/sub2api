@@ -397,6 +397,12 @@ func ProvideRequestDetailService(repo RequestDetailRepository) *RequestDetailSer
 	return svc
 }
 
+func ProvideRequestDetailBackupService(requestDetailService *RequestDetailService, backupService *BackupService, settingRepo SettingRepository) *RequestDetailBackupService {
+	svc := NewRequestDetailBackupService(requestDetailService, backupService, settingRepo)
+	svc.Start()
+	return svc
+}
+
 // ProvideSettingService wires SettingService with group reader and proxy repo.
 func ProvideSettingService(settingRepo SettingRepository, groupRepo GroupRepository, proxyRepo ProxyRepository, cfg *config.Config) *SettingService {
 	svc := NewSettingService(settingRepo, cfg)
@@ -477,6 +483,7 @@ var ProviderSet = wire.NewSet(
 	NewDataManagementService,
 	ProvideBackupService,
 	ProvideRequestDetailService,
+	ProvideRequestDetailBackupService,
 	ProvideOpsSystemLogSink,
 	NewOpsService,
 	ProvideOpsMetricsCollector,

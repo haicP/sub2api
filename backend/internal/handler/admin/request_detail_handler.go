@@ -18,10 +18,11 @@ import (
 
 type RequestDetailHandler struct {
 	service *service.RequestDetailService
+	backup  *service.RequestDetailBackupService
 }
 
-func NewRequestDetailHandler(svc *service.RequestDetailService) *RequestDetailHandler {
-	return &RequestDetailHandler{service: svc}
+func NewRequestDetailHandler(svc *service.RequestDetailService, backup *service.RequestDetailBackupService) *RequestDetailHandler {
+	return &RequestDetailHandler{service: svc, backup: backup}
 }
 
 func (h *RequestDetailHandler) List(c *gin.Context) {
@@ -139,6 +140,68 @@ func (h *RequestDetailHandler) Export(c *gin.Context) {
 	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer.Bytes())
+}
+
+func (h *RequestDetailHandler) CreateBackup(c *gin.Context) {
+	record, err := h.backup.StartBackup(c.Request.Context(), "manual")
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Accepted(c, record)
+}
+
+func (h *RequestDetailHandler) ListBackups(c *gin.Context) {
+	records, err := h.backup.ListBackups(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if records == nil {
+		records = []service.BackupRecord{}
+	}
+	response.Success(c, gin.H{"items": records})
+}
+
+func (h *RequestDetailHandler) GetBackup(c *gin.Context) {
+	record, err := h.backup.GetBackupRecord(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, record)
+}
+
+func (h *RequestDetailHandler) GetBackupDownloadURL(c *gin.Context) {
+	url, err := h.backup.GetBackupDownloadURL(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"url": url})
+}
+
+func (h *RequestDetailHandler) GetBackupSchedule(c *gin.Context) {
+	cfg, err := h.backup.GetSchedule(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, cfg)
+}
+
+func (h *RequestDetailHandler) UpdateBackupSchedule(c *gin.Context) {
+	var req service.BackupScheduleConfig
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request: "+err.Error())
+		return
+	}
+	cfg, err := h.backup.UpdateSchedule(c.Request.Context(), req)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, cfg)
 }
 
 func parseRequestDetailFilters(c *gin.Context) (service.RequestDetailFilters, bool) {
