@@ -1477,6 +1477,11 @@ export default {
       }
     },
 
+    requestDetails: {
+      title: 'Request Details',
+      description: 'View complete input and output parameters for model calls'
+    },
+
     dataManagement: {
       title: 'Data Management',
       description: 'Manage data management agent status, object storage settings, and backup jobs in one place',

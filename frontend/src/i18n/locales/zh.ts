@@ -1498,6 +1498,11 @@ export default {
       }
     },
 
+    requestDetails: {
+      title: '请求详情',
+      description: '查看大模型调用的完整输入输出参数'
+    },
+
     dataManagement: {
       title: '数据管理',
       description: '统一管理数据管理代理状态、对象存储配置和备份任务',

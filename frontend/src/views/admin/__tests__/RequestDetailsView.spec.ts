@@ -3,20 +3,26 @@ import { defineComponent } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import RequestDetailsView from '../RequestDetailsView.vue'
 
-const { listMock, listBackupsMock, getBackupScheduleMock, getMock } = vi.hoisted(() => ({
-  listMock: vi.fn(),
-  listBackupsMock: vi.fn(),
-  getBackupScheduleMock: vi.fn(),
-  getMock: vi.fn()
-}))
+const { requestDetailsAPIMock, listMock, listBackupsMock, getBackupScheduleMock, getMock } = vi.hoisted(() => {
+  const requestDetailsAPIMock = {
+    list: vi.fn(),
+    listBackups: vi.fn(),
+    getBackupSchedule: vi.fn(),
+    get: vi.fn()
+  }
+
+  return {
+    requestDetailsAPIMock,
+    listMock: requestDetailsAPIMock.list,
+    listBackupsMock: requestDetailsAPIMock.listBackups,
+    getBackupScheduleMock: requestDetailsAPIMock.getBackupSchedule,
+    getMock: requestDetailsAPIMock.get
+  }
+})
 
 vi.mock('@/api/admin/requestDetails', () => ({
-  requestDetailsAPI: {
-    list: listMock,
-    listBackups: listBackupsMock,
-    getBackupSchedule: getBackupScheduleMock,
-    get: getMock
-  }
+  default: requestDetailsAPIMock,
+  requestDetailsAPI: requestDetailsAPIMock
 }))
 
 vi.mock('@/stores', () => ({

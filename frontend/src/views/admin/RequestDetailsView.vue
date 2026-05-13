@@ -1,17 +1,6 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">请求详情</h1>
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">查看大模型调用的完整输入输出参数</p>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <button class="btn btn-secondary" :disabled="loading" @click="handleExport">导出 Excel</button>
-          <button class="btn btn-primary" :disabled="backupRunning" @click="handleCreateBackup">备份请求详情</button>
-        </div>
-      </div>
-
       <section class="card p-4">
         <div class="grid gap-3 md:grid-cols-4">
           <input v-model="filters.request_id" class="input" placeholder="Request ID" />
@@ -40,9 +29,15 @@
             <option value="false">非流式</option>
           </select>
         </div>
-        <div class="mt-4 flex gap-2">
-          <button class="btn btn-primary" @click="loadData">查询</button>
-          <button class="btn btn-secondary" @click="resetFilters">重置</button>
+        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex flex-wrap gap-2">
+            <button class="btn btn-primary" @click="loadData">查询</button>
+            <button class="btn btn-secondary" @click="resetFilters">重置</button>
+          </div>
+          <div class="flex flex-wrap gap-2 sm:justify-end">
+            <button class="btn btn-secondary" :disabled="loading" @click="handleExport">导出 Excel</button>
+            <button class="btn btn-primary" :disabled="backupRunning" @click="handleCreateBackup">备份请求详情</button>
+          </div>
         </div>
       </section>
 
