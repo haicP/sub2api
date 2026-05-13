@@ -20,7 +20,12 @@ docs/
 
 # OS files
 .DS_Store
+**/.DS_Store
 Thumbs.db
+.AppleDouble/
+__MACOSX/
+._*
+**/._*
 
 # Build artifacts
 dist/

@@ -68,6 +68,21 @@ func TestLatestMigrationBaseline(t *testing.T) {
 	})
 }
 
+func TestMigrationSQLFiles(t *testing.T) {
+	fsys := fstest.MapFS{
+		"001_init.sql":   &fstest.MapFile{Data: []byte("CREATE TABLE t1(id int);")},
+		"002_next.sql":   &fstest.MapFile{Data: []byte("CREATE TABLE t2(id int);")},
+		"._001_init.sql": &fstest.MapFile{Data: []byte("AppleDouble metadata")},
+		".hidden.sql":    &fstest.MapFile{Data: []byte("hidden metadata")},
+		"_scratch.sql":   &fstest.MapFile{Data: []byte("temporary metadata")},
+		"not_a_sql.txt":  &fstest.MapFile{Data: []byte("ignored")},
+	}
+
+	files, err := migrationSQLFiles(fsys)
+	require.NoError(t, err)
+	require.Equal(t, []string{"001_init.sql", "002_next.sql"}, files)
+}
+
 func TestIsMigrationChecksumCompatible_AdditionalCases(t *testing.T) {
 	require.False(t, isMigrationChecksumCompatible("unknown.sql", "db", "file"))
 
