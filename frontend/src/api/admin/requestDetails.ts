@@ -56,6 +56,26 @@ export interface RequestDetail extends RequestDetailSummary {
   response_content?: string
   response_body?: string
   response_truncated: boolean
+  image_artifacts?: RequestDetailImageArtifact[]
+}
+
+export interface RequestDetailImageArtifact {
+  id: number
+  request_id: string
+  direction: string
+  source: string
+  status: string
+  s3_key: string
+  original_url?: string
+  content_type: string
+  file_name?: string
+  size_bytes: number
+  sha256?: string
+  image_index?: number
+  metadata?: Record<string, unknown>
+  error_message?: string
+  created_at: string
+  updated_at: string
 }
 
 export interface RequestDetailBackupRecord {
@@ -122,6 +142,11 @@ export async function getDownloadURL(id: string): Promise<{ url: string }> {
   return data
 }
 
+export async function getArtifactDownloadURL(detailId: number, artifactId: number): Promise<{ url: string }> {
+  const { data } = await apiClient.get<{ url: string }>(`/admin/request-details/${detailId}/artifacts/${artifactId}/download-url`)
+  return data
+}
+
 export async function getBackupSchedule(): Promise<RequestDetailBackupSchedule> {
   const { data } = await apiClient.get<RequestDetailBackupSchedule>('/admin/request-details/backup-schedule')
   return data
@@ -140,6 +165,7 @@ export const requestDetailsAPI = {
   listBackups,
   getBackup,
   getDownloadURL,
+  getArtifactDownloadURL,
   getBackupSchedule,
   updateBackupSchedule
 }

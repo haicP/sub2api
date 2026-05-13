@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"net/textproto"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
@@ -22,6 +24,72 @@ type failingOpenAIImageWriter struct {
 	gin.ResponseWriter
 	failAfter int
 	writes    int
+}
+
+func TestOpenAIGatewayServiceForwardImages_APIKeyStreamCompletedWithoutUpstreamCloseReturns(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","prompt":"draw a cat","stream":true,"response_format":"b64_json"}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+
+	upstreamBody := []byte(`data: {"type":"image_generation.completed","b64_json":"aGVsbG8=","usage":{"input_tokens":12,"output_tokens":21,"output_tokens_details":{"image_tokens":9}}}` + "\n\n")
+	upstreamStream := newOpenAICompatBlockingReadCloser(upstreamBody)
+	defer func() {
+		require.NoError(t, upstreamStream.Close())
+	}()
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{},
+		httpUpstream: &httpUpstreamRecorder{
+			resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{
+					"Content-Type": []string{"text/event-stream"},
+					"X-Request-Id": []string{"req_img_stream_terminal_no_close"},
+				},
+				Body: upstreamStream,
+			},
+		},
+	}
+	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+	require.NoError(t, err)
+
+	account := &Account{
+		ID:       10,
+		Name:     "openai-apikey",
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key":  "test-api-key",
+			"base_url": "https://image-upstream.example/v1",
+		},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		result, forwardErr := svc.ForwardImages(context.Background(), c, account, body, parsed, "")
+		if forwardErr != nil {
+			done <- forwardErr
+			return
+		}
+		if result == nil || result.ImageCount != 1 {
+			done <- fmt.Errorf("unexpected result: %#v", result)
+			return
+		}
+		done <- nil
+	}()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		require.Fail(t, "image stream should return after completed event even if upstream keeps the connection open")
+	}
+	require.Contains(t, rec.Body.String(), "image_generation.completed")
+	require.Contains(t, rec.Body.String(), "aGVsbG8=")
 }
 
 func (w *failingOpenAIImageWriter) Write(p []byte) (int, error) {

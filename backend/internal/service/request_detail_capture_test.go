@@ -1,8 +1,10 @@
 package service
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -80,6 +82,62 @@ func TestRequestDetailCaptureRedactsHeadersAndCapturesResponse(t *testing.T) {
 
 	require.Equal(t, []string{"application/json"}, detail.ResponseHeaders["Content-Type"])
 	require.Equal(t, []string{"***REDACTED***"}, detail.ResponseHeaders["Set-Cookie"])
+}
+
+func TestRequestDetailImageArtifactsSanitizeResponseB64WithoutS3(t *testing.T) {
+	detail := &RequestDetail{
+		RequestID:    "req-img-1",
+		Endpoint:     "/v1/images/generations",
+		Platform:     PlatformOpenAI,
+		ResponseBody: `{"created":1,"data":[{"b64_json":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ","revised_prompt":"cat"}]}`,
+	}
+
+	svc := NewRequestDetailService(&requestDetailRepoStub{})
+	svc.prepareImageArtifacts(detail)
+
+	require.NotContains(t, detail.ResponseBody, "iVBORw0KGgoAAAANS")
+	require.Contains(t, detail.ResponseBody, "artifact_ref")
+	require.Len(t, detail.ImageArtifacts, 1)
+	require.Equal(t, requestDetailArtifactStatusSkipped, detail.ImageArtifacts[0].Status)
+	require.Equal(t, "response", detail.ImageArtifacts[0].Direction)
+	require.Equal(t, "$.data.0.b64_json", detail.ImageArtifacts[0].Source)
+	require.NotZero(t, detail.ImageArtifacts[0].SizeBytes)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(detail.ResponseBody), &parsed))
+	require.NotNil(t, parsed)
+}
+
+func TestRequestDetailImageArtifactsSanitizeMultipartInputWithoutS3(t *testing.T) {
+	var body strings.Builder
+	body.WriteString("--boundary\r\n")
+	body.WriteString("Content-Disposition: form-data; name=\"prompt\"\r\n\r\n")
+	body.WriteString("edit it\r\n")
+	body.WriteString("--boundary\r\n")
+	body.WriteString("Content-Disposition: form-data; name=\"image\"; filename=\"input.png\"\r\n")
+	body.WriteString("Content-Type: image/png\r\n\r\n")
+	body.WriteString("\x89PNG\r\n\x1a\nimage-bytes\r\n")
+	body.WriteString("--boundary--\r\n")
+
+	detail := &RequestDetail{
+		RequestID: "req-img-2",
+		Endpoint:  "/v1/images/edits",
+		Platform:  PlatformOpenAI,
+		RequestHeaders: map[string][]string{
+			"Content-Type": {"multipart/form-data; boundary=boundary"},
+		},
+		RequestBody: body.String(),
+	}
+
+	svc := NewRequestDetailService(&requestDetailRepoStub{})
+	svc.prepareImageArtifacts(detail)
+
+	require.NotContains(t, detail.RequestBody, "image-bytes")
+	require.Contains(t, detail.RequestBody, "multipart/form-data")
+	require.Len(t, detail.ImageArtifacts, 1)
+	require.Equal(t, requestDetailArtifactStatusSkipped, detail.ImageArtifacts[0].Status)
+	require.Equal(t, "request", detail.ImageArtifacts[0].Direction)
+	require.Equal(t, "multipart.image", detail.ImageArtifacts[0].Source)
 }
 
 func TestGetRequestDetailCaptureMissing(t *testing.T) {

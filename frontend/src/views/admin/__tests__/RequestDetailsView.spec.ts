@@ -3,12 +3,13 @@ import { defineComponent } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import RequestDetailsView from '../RequestDetailsView.vue'
 
-const { requestDetailsAPIMock, listMock, listBackupsMock, getBackupScheduleMock, getMock } = vi.hoisted(() => {
+const { requestDetailsAPIMock, listMock, listBackupsMock, getBackupScheduleMock, getMock, getArtifactDownloadURLMock } = vi.hoisted(() => {
   const requestDetailsAPIMock = {
     list: vi.fn(),
     listBackups: vi.fn(),
     getBackupSchedule: vi.fn(),
-    get: vi.fn()
+    get: vi.fn(),
+    getArtifactDownloadURL: vi.fn()
   }
 
   return {
@@ -16,7 +17,8 @@ const { requestDetailsAPIMock, listMock, listBackupsMock, getBackupScheduleMock,
     listMock: requestDetailsAPIMock.list,
     listBackupsMock: requestDetailsAPIMock.listBackups,
     getBackupScheduleMock: requestDetailsAPIMock.getBackupSchedule,
-    getMock: requestDetailsAPIMock.get
+    getMock: requestDetailsAPIMock.get,
+    getArtifactDownloadURLMock: requestDetailsAPIMock.getArtifactDownloadURL
   }
 })
 
@@ -96,7 +98,21 @@ describe('RequestDetailsView', () => {
       response_truncated: false,
       request_body: '{"foo":"bar"}',
       response_content: '最终回复内容',
-      response_body: '{"ok":true}'
+      response_body: '{"ok":true}',
+      image_artifacts: [
+        {
+          id: 9,
+          request_id: 'req-1',
+          direction: 'response',
+          source: '$.data.0.b64_json',
+          status: 'stored',
+          s3_key: 'backups/request-detail-images/2026/05/12/req-1/artifact-1.png',
+          content_type: 'image/png',
+          size_bytes: 123,
+          created_at: '2026-05-12T13:00:01Z',
+          updated_at: '2026-05-12T13:00:01Z'
+        }
+      ]
     })
 
     const wrapper = mount(RequestDetailsView, {
@@ -119,7 +135,58 @@ describe('RequestDetailsView', () => {
     expect(wrapper.text()).toContain('req-1')
     expect(wrapper.text()).toContain('响应内容')
     expect(wrapper.text()).toContain('最终回复内容')
+    expect(wrapper.text()).toContain('图片附件')
+    expect(wrapper.text()).toContain('$.data.0.b64_json')
     expect(wrapper.text().indexOf('响应内容')).toBeLessThan(wrapper.text().indexOf('响应体'))
+  })
+
+  it('点击图片附件预览时按需获取预签名链接', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    listMock.mockResolvedValueOnce({
+      items: [{ id: 1, request_id: 'req-1', created_at: '2026-05-12T13:00:00Z', status_code: 200, success: true, platform: 'openai', endpoint: '/v1/images/generations', upstream_endpoint: '/v1/images/generations', model: 'gpt-image-2', upstream_model: 'gpt-image-2', stream: false }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1
+    })
+    listBackupsMock.mockResolvedValueOnce({ items: [] })
+    getBackupScheduleMock.mockResolvedValueOnce({ enabled: false, cron_expr: '0 2 * * *', retain_days: 0, retain_count: 0 })
+    getMock.mockResolvedValueOnce({
+      id: 1,
+      request_id: 'req-1',
+      created_at: '2026-05-12T13:00:00Z',
+      status_code: 200,
+      success: true,
+      platform: 'openai',
+      endpoint: '/v1/images/generations',
+      upstream_endpoint: '/v1/images/generations',
+      model: 'gpt-image-2',
+      upstream_model: 'gpt-image-2',
+      stream: false,
+      response_truncated: false,
+      image_artifacts: [{ id: 9, request_id: 'req-1', direction: 'response', source: '$.data.0.b64_json', status: 'stored', s3_key: 'key', content_type: 'image/png', size_bytes: 123, created_at: '2026-05-12T13:00:01Z', updated_at: '2026-05-12T13:00:01Z' }]
+    })
+    getArtifactDownloadURLMock.mockResolvedValueOnce({ url: 'https://example.com/presigned' })
+
+    const wrapper = mount(RequestDetailsView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          Pagination: true,
+          BaseDialog: BaseDialogStub
+        }
+      }
+    })
+
+    await flushPromises()
+    await wrapper.get('button.btn-sm').trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === '预览')?.trigger('click')
+    await flushPromises()
+
+    expect(getArtifactDownloadURLMock).toHaveBeenCalledWith(1, 9)
+    expect(openSpy).toHaveBeenCalledWith('https://example.com/presigned', '_blank', 'noopener,noreferrer')
+    openSpy.mockRestore()
   })
 
   it('renders request details filters and backup section', async () => {

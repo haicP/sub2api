@@ -207,6 +207,43 @@
         </div>
         <div class="lg:col-span-2">
           <div class="mb-2 flex items-center justify-between">
+            <h3 class="text-sm font-medium text-gray-900 dark:text-white">图片附件</h3>
+            <span class="text-xs text-gray-500 dark:text-gray-400">{{ selectedDetail.image_artifacts?.length || 0 }} 个</span>
+          </div>
+          <div v-if="selectedDetail.image_artifacts?.length" class="overflow-x-auto rounded border border-gray-200 dark:border-dark-700">
+            <table class="w-full min-w-[820px] text-xs">
+              <thead>
+                <tr class="border-b border-gray-200 bg-gray-50 text-left text-gray-500 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400">
+                  <th class="px-3 py-2">ID</th>
+                  <th class="px-3 py-2">方向</th>
+                  <th class="px-3 py-2">来源</th>
+                  <th class="px-3 py-2">状态</th>
+                  <th class="px-3 py-2">类型</th>
+                  <th class="px-3 py-2">大小</th>
+                  <th class="px-3 py-2">S3 Key</th>
+                  <th class="px-3 py-2">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="artifact in selectedDetail.image_artifacts" :key="artifact.id" class="border-b border-gray-100 dark:border-dark-800">
+                  <td class="px-3 py-2 font-mono">{{ artifact.id }}</td>
+                  <td class="px-3 py-2">{{ artifact.direction }}</td>
+                  <td class="px-3 py-2">{{ artifact.source }}</td>
+                  <td class="px-3 py-2">{{ artifact.status }}</td>
+                  <td class="px-3 py-2">{{ artifact.content_type || '-' }}</td>
+                  <td class="px-3 py-2">{{ formatBytes(artifact.size_bytes) }}</td>
+                  <td class="max-w-[260px] truncate px-3 py-2 font-mono" :title="artifact.s3_key || artifact.error_message">{{ artifact.s3_key || artifact.error_message || '-' }}</td>
+                  <td class="px-3 py-2">
+                    <button class="btn btn-secondary btn-sm" :disabled="artifact.status !== 'stored'" @click="openArtifact(artifact.id)">预览</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="rounded bg-gray-50 p-3 text-xs text-gray-500 dark:bg-dark-800 dark:text-gray-400">-</div>
+        </div>
+        <div class="lg:col-span-2">
+          <div class="mb-2 flex items-center justify-between">
             <h3 class="text-sm font-medium text-gray-900 dark:text-white">响应内容</h3>
             <button class="btn btn-secondary btn-sm" @click="copyText(selectedDetail.response_content || '')">复制</button>
           </div>
@@ -389,6 +426,16 @@ const downloadBackup = async (id: string) => {
     window.open(result.url, '_blank', 'noopener,noreferrer')
   } catch (error) {
     appStore.showError((error as Error).message || '获取下载链接失败')
+  }
+}
+
+const openArtifact = async (artifactId: number) => {
+  if (!selectedDetail.value) return
+  try {
+    const result = await requestDetailsAPI.getArtifactDownloadURL(selectedDetail.value.id, artifactId)
+    window.open(result.url, '_blank', 'noopener,noreferrer')
+  } catch (error) {
+    appStore.showError((error as Error).message || '获取图片链接失败')
   }
 }
 

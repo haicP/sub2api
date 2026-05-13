@@ -37,6 +37,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/requestdetail"
+	"github.com/Wei-Shaw/sub2api/ent/requestdetailimageartifact"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -84,6 +85,7 @@ const (
 	TypeProxy                         = "Proxy"
 	TypeRedeemCode                    = "RedeemCode"
 	TypeRequestDetail                 = "RequestDetail"
+	TypeRequestDetailImageArtifact    = "RequestDetailImageArtifact"
 	TypeSecuritySecret                = "SecuritySecret"
 	TypeSetting                       = "Setting"
 	TypeSubscriptionPlan              = "SubscriptionPlan"
@@ -31767,6 +31769,1180 @@ func (m *RequestDetailMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *RequestDetailMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown RequestDetail edge %s", name)
+}
+
+// RequestDetailImageArtifactMutation represents an operation that mutates the RequestDetailImageArtifact nodes in the graph.
+type RequestDetailImageArtifactMutation struct {
+	config
+	op             Op
+	typ            string
+	id             *int64
+	request_id     *string
+	direction      *string
+	source         *string
+	status         *string
+	s3_key         *string
+	original_url   *string
+	content_type   *string
+	file_name      *string
+	size_bytes     *int64
+	addsize_bytes  *int64
+	sha256         *string
+	image_index    *int
+	addimage_index *int
+	metadata       *map[string]interface{}
+	error_message  *string
+	created_at     *time.Time
+	updated_at     *time.Time
+	clearedFields  map[string]struct{}
+	done           bool
+	oldValue       func(context.Context) (*RequestDetailImageArtifact, error)
+	predicates     []predicate.RequestDetailImageArtifact
+}
+
+var _ ent.Mutation = (*RequestDetailImageArtifactMutation)(nil)
+
+// requestdetailimageartifactOption allows management of the mutation configuration using functional options.
+type requestdetailimageartifactOption func(*RequestDetailImageArtifactMutation)
+
+// newRequestDetailImageArtifactMutation creates new mutation for the RequestDetailImageArtifact entity.
+func newRequestDetailImageArtifactMutation(c config, op Op, opts ...requestdetailimageartifactOption) *RequestDetailImageArtifactMutation {
+	m := &RequestDetailImageArtifactMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeRequestDetailImageArtifact,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withRequestDetailImageArtifactID sets the ID field of the mutation.
+func withRequestDetailImageArtifactID(id int64) requestdetailimageartifactOption {
+	return func(m *RequestDetailImageArtifactMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *RequestDetailImageArtifact
+		)
+		m.oldValue = func(ctx context.Context) (*RequestDetailImageArtifact, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().RequestDetailImageArtifact.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withRequestDetailImageArtifact sets the old RequestDetailImageArtifact of the mutation.
+func withRequestDetailImageArtifact(node *RequestDetailImageArtifact) requestdetailimageartifactOption {
+	return func(m *RequestDetailImageArtifactMutation) {
+		m.oldValue = func(context.Context) (*RequestDetailImageArtifact, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m RequestDetailImageArtifactMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m RequestDetailImageArtifactMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *RequestDetailImageArtifactMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *RequestDetailImageArtifactMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().RequestDetailImageArtifact.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetRequestID sets the "request_id" field.
+func (m *RequestDetailImageArtifactMutation) SetRequestID(s string) {
+	m.request_id = &s
+}
+
+// RequestID returns the value of the "request_id" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) RequestID() (r string, exists bool) {
+	v := m.request_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestID returns the old "request_id" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldRequestID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestID: %w", err)
+	}
+	return oldValue.RequestID, nil
+}
+
+// ResetRequestID resets all changes to the "request_id" field.
+func (m *RequestDetailImageArtifactMutation) ResetRequestID() {
+	m.request_id = nil
+}
+
+// SetDirection sets the "direction" field.
+func (m *RequestDetailImageArtifactMutation) SetDirection(s string) {
+	m.direction = &s
+}
+
+// Direction returns the value of the "direction" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) Direction() (r string, exists bool) {
+	v := m.direction
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDirection returns the old "direction" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldDirection(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDirection is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDirection requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDirection: %w", err)
+	}
+	return oldValue.Direction, nil
+}
+
+// ResetDirection resets all changes to the "direction" field.
+func (m *RequestDetailImageArtifactMutation) ResetDirection() {
+	m.direction = nil
+}
+
+// SetSource sets the "source" field.
+func (m *RequestDetailImageArtifactMutation) SetSource(s string) {
+	m.source = &s
+}
+
+// Source returns the value of the "source" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) Source() (r string, exists bool) {
+	v := m.source
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSource returns the old "source" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldSource(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSource is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSource requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSource: %w", err)
+	}
+	return oldValue.Source, nil
+}
+
+// ResetSource resets all changes to the "source" field.
+func (m *RequestDetailImageArtifactMutation) ResetSource() {
+	m.source = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *RequestDetailImageArtifactMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *RequestDetailImageArtifactMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetS3Key sets the "s3_key" field.
+func (m *RequestDetailImageArtifactMutation) SetS3Key(s string) {
+	m.s3_key = &s
+}
+
+// S3Key returns the value of the "s3_key" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) S3Key() (r string, exists bool) {
+	v := m.s3_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldS3Key returns the old "s3_key" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldS3Key(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldS3Key is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldS3Key requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldS3Key: %w", err)
+	}
+	return oldValue.S3Key, nil
+}
+
+// ResetS3Key resets all changes to the "s3_key" field.
+func (m *RequestDetailImageArtifactMutation) ResetS3Key() {
+	m.s3_key = nil
+}
+
+// SetOriginalURL sets the "original_url" field.
+func (m *RequestDetailImageArtifactMutation) SetOriginalURL(s string) {
+	m.original_url = &s
+}
+
+// OriginalURL returns the value of the "original_url" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) OriginalURL() (r string, exists bool) {
+	v := m.original_url
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOriginalURL returns the old "original_url" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldOriginalURL(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOriginalURL is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOriginalURL requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOriginalURL: %w", err)
+	}
+	return oldValue.OriginalURL, nil
+}
+
+// ResetOriginalURL resets all changes to the "original_url" field.
+func (m *RequestDetailImageArtifactMutation) ResetOriginalURL() {
+	m.original_url = nil
+}
+
+// SetContentType sets the "content_type" field.
+func (m *RequestDetailImageArtifactMutation) SetContentType(s string) {
+	m.content_type = &s
+}
+
+// ContentType returns the value of the "content_type" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) ContentType() (r string, exists bool) {
+	v := m.content_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContentType returns the old "content_type" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldContentType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContentType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContentType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContentType: %w", err)
+	}
+	return oldValue.ContentType, nil
+}
+
+// ResetContentType resets all changes to the "content_type" field.
+func (m *RequestDetailImageArtifactMutation) ResetContentType() {
+	m.content_type = nil
+}
+
+// SetFileName sets the "file_name" field.
+func (m *RequestDetailImageArtifactMutation) SetFileName(s string) {
+	m.file_name = &s
+}
+
+// FileName returns the value of the "file_name" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) FileName() (r string, exists bool) {
+	v := m.file_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFileName returns the old "file_name" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldFileName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFileName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFileName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFileName: %w", err)
+	}
+	return oldValue.FileName, nil
+}
+
+// ResetFileName resets all changes to the "file_name" field.
+func (m *RequestDetailImageArtifactMutation) ResetFileName() {
+	m.file_name = nil
+}
+
+// SetSizeBytes sets the "size_bytes" field.
+func (m *RequestDetailImageArtifactMutation) SetSizeBytes(i int64) {
+	m.size_bytes = &i
+	m.addsize_bytes = nil
+}
+
+// SizeBytes returns the value of the "size_bytes" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) SizeBytes() (r int64, exists bool) {
+	v := m.size_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSizeBytes returns the old "size_bytes" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldSizeBytes(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSizeBytes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSizeBytes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSizeBytes: %w", err)
+	}
+	return oldValue.SizeBytes, nil
+}
+
+// AddSizeBytes adds i to the "size_bytes" field.
+func (m *RequestDetailImageArtifactMutation) AddSizeBytes(i int64) {
+	if m.addsize_bytes != nil {
+		*m.addsize_bytes += i
+	} else {
+		m.addsize_bytes = &i
+	}
+}
+
+// AddedSizeBytes returns the value that was added to the "size_bytes" field in this mutation.
+func (m *RequestDetailImageArtifactMutation) AddedSizeBytes() (r int64, exists bool) {
+	v := m.addsize_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSizeBytes resets all changes to the "size_bytes" field.
+func (m *RequestDetailImageArtifactMutation) ResetSizeBytes() {
+	m.size_bytes = nil
+	m.addsize_bytes = nil
+}
+
+// SetSha256 sets the "sha256" field.
+func (m *RequestDetailImageArtifactMutation) SetSha256(s string) {
+	m.sha256 = &s
+}
+
+// Sha256 returns the value of the "sha256" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) Sha256() (r string, exists bool) {
+	v := m.sha256
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSha256 returns the old "sha256" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldSha256(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSha256 is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSha256 requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSha256: %w", err)
+	}
+	return oldValue.Sha256, nil
+}
+
+// ResetSha256 resets all changes to the "sha256" field.
+func (m *RequestDetailImageArtifactMutation) ResetSha256() {
+	m.sha256 = nil
+}
+
+// SetImageIndex sets the "image_index" field.
+func (m *RequestDetailImageArtifactMutation) SetImageIndex(i int) {
+	m.image_index = &i
+	m.addimage_index = nil
+}
+
+// ImageIndex returns the value of the "image_index" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) ImageIndex() (r int, exists bool) {
+	v := m.image_index
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldImageIndex returns the old "image_index" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldImageIndex(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldImageIndex is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldImageIndex requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldImageIndex: %w", err)
+	}
+	return oldValue.ImageIndex, nil
+}
+
+// AddImageIndex adds i to the "image_index" field.
+func (m *RequestDetailImageArtifactMutation) AddImageIndex(i int) {
+	if m.addimage_index != nil {
+		*m.addimage_index += i
+	} else {
+		m.addimage_index = &i
+	}
+}
+
+// AddedImageIndex returns the value that was added to the "image_index" field in this mutation.
+func (m *RequestDetailImageArtifactMutation) AddedImageIndex() (r int, exists bool) {
+	v := m.addimage_index
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearImageIndex clears the value of the "image_index" field.
+func (m *RequestDetailImageArtifactMutation) ClearImageIndex() {
+	m.image_index = nil
+	m.addimage_index = nil
+	m.clearedFields[requestdetailimageartifact.FieldImageIndex] = struct{}{}
+}
+
+// ImageIndexCleared returns if the "image_index" field was cleared in this mutation.
+func (m *RequestDetailImageArtifactMutation) ImageIndexCleared() bool {
+	_, ok := m.clearedFields[requestdetailimageartifact.FieldImageIndex]
+	return ok
+}
+
+// ResetImageIndex resets all changes to the "image_index" field.
+func (m *RequestDetailImageArtifactMutation) ResetImageIndex() {
+	m.image_index = nil
+	m.addimage_index = nil
+	delete(m.clearedFields, requestdetailimageartifact.FieldImageIndex)
+}
+
+// SetMetadata sets the "metadata" field.
+func (m *RequestDetailImageArtifactMutation) SetMetadata(value map[string]interface{}) {
+	m.metadata = &value
+}
+
+// Metadata returns the value of the "metadata" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) Metadata() (r map[string]interface{}, exists bool) {
+	v := m.metadata
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMetadata returns the old "metadata" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldMetadata(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMetadata is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMetadata requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMetadata: %w", err)
+	}
+	return oldValue.Metadata, nil
+}
+
+// ResetMetadata resets all changes to the "metadata" field.
+func (m *RequestDetailImageArtifactMutation) ResetMetadata() {
+	m.metadata = nil
+}
+
+// SetErrorMessage sets the "error_message" field.
+func (m *RequestDetailImageArtifactMutation) SetErrorMessage(s string) {
+	m.error_message = &s
+}
+
+// ErrorMessage returns the value of the "error_message" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) ErrorMessage() (r string, exists bool) {
+	v := m.error_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorMessage returns the old "error_message" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldErrorMessage(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorMessage: %w", err)
+	}
+	return oldValue.ErrorMessage, nil
+}
+
+// ResetErrorMessage resets all changes to the "error_message" field.
+func (m *RequestDetailImageArtifactMutation) ResetErrorMessage() {
+	m.error_message = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *RequestDetailImageArtifactMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *RequestDetailImageArtifactMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *RequestDetailImageArtifactMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *RequestDetailImageArtifactMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the RequestDetailImageArtifact entity.
+// If the RequestDetailImageArtifact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestDetailImageArtifactMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *RequestDetailImageArtifactMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the RequestDetailImageArtifactMutation builder.
+func (m *RequestDetailImageArtifactMutation) Where(ps ...predicate.RequestDetailImageArtifact) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the RequestDetailImageArtifactMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RequestDetailImageArtifactMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RequestDetailImageArtifact, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *RequestDetailImageArtifactMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RequestDetailImageArtifactMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (RequestDetailImageArtifact).
+func (m *RequestDetailImageArtifactMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *RequestDetailImageArtifactMutation) Fields() []string {
+	fields := make([]string, 0, 15)
+	if m.request_id != nil {
+		fields = append(fields, requestdetailimageartifact.FieldRequestID)
+	}
+	if m.direction != nil {
+		fields = append(fields, requestdetailimageartifact.FieldDirection)
+	}
+	if m.source != nil {
+		fields = append(fields, requestdetailimageartifact.FieldSource)
+	}
+	if m.status != nil {
+		fields = append(fields, requestdetailimageartifact.FieldStatus)
+	}
+	if m.s3_key != nil {
+		fields = append(fields, requestdetailimageartifact.FieldS3Key)
+	}
+	if m.original_url != nil {
+		fields = append(fields, requestdetailimageartifact.FieldOriginalURL)
+	}
+	if m.content_type != nil {
+		fields = append(fields, requestdetailimageartifact.FieldContentType)
+	}
+	if m.file_name != nil {
+		fields = append(fields, requestdetailimageartifact.FieldFileName)
+	}
+	if m.size_bytes != nil {
+		fields = append(fields, requestdetailimageartifact.FieldSizeBytes)
+	}
+	if m.sha256 != nil {
+		fields = append(fields, requestdetailimageartifact.FieldSha256)
+	}
+	if m.image_index != nil {
+		fields = append(fields, requestdetailimageartifact.FieldImageIndex)
+	}
+	if m.metadata != nil {
+		fields = append(fields, requestdetailimageartifact.FieldMetadata)
+	}
+	if m.error_message != nil {
+		fields = append(fields, requestdetailimageartifact.FieldErrorMessage)
+	}
+	if m.created_at != nil {
+		fields = append(fields, requestdetailimageartifact.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, requestdetailimageartifact.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *RequestDetailImageArtifactMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case requestdetailimageartifact.FieldRequestID:
+		return m.RequestID()
+	case requestdetailimageartifact.FieldDirection:
+		return m.Direction()
+	case requestdetailimageartifact.FieldSource:
+		return m.Source()
+	case requestdetailimageartifact.FieldStatus:
+		return m.Status()
+	case requestdetailimageartifact.FieldS3Key:
+		return m.S3Key()
+	case requestdetailimageartifact.FieldOriginalURL:
+		return m.OriginalURL()
+	case requestdetailimageartifact.FieldContentType:
+		return m.ContentType()
+	case requestdetailimageartifact.FieldFileName:
+		return m.FileName()
+	case requestdetailimageartifact.FieldSizeBytes:
+		return m.SizeBytes()
+	case requestdetailimageartifact.FieldSha256:
+		return m.Sha256()
+	case requestdetailimageartifact.FieldImageIndex:
+		return m.ImageIndex()
+	case requestdetailimageartifact.FieldMetadata:
+		return m.Metadata()
+	case requestdetailimageartifact.FieldErrorMessage:
+		return m.ErrorMessage()
+	case requestdetailimageartifact.FieldCreatedAt:
+		return m.CreatedAt()
+	case requestdetailimageartifact.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *RequestDetailImageArtifactMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case requestdetailimageartifact.FieldRequestID:
+		return m.OldRequestID(ctx)
+	case requestdetailimageartifact.FieldDirection:
+		return m.OldDirection(ctx)
+	case requestdetailimageartifact.FieldSource:
+		return m.OldSource(ctx)
+	case requestdetailimageartifact.FieldStatus:
+		return m.OldStatus(ctx)
+	case requestdetailimageartifact.FieldS3Key:
+		return m.OldS3Key(ctx)
+	case requestdetailimageartifact.FieldOriginalURL:
+		return m.OldOriginalURL(ctx)
+	case requestdetailimageartifact.FieldContentType:
+		return m.OldContentType(ctx)
+	case requestdetailimageartifact.FieldFileName:
+		return m.OldFileName(ctx)
+	case requestdetailimageartifact.FieldSizeBytes:
+		return m.OldSizeBytes(ctx)
+	case requestdetailimageartifact.FieldSha256:
+		return m.OldSha256(ctx)
+	case requestdetailimageartifact.FieldImageIndex:
+		return m.OldImageIndex(ctx)
+	case requestdetailimageartifact.FieldMetadata:
+		return m.OldMetadata(ctx)
+	case requestdetailimageartifact.FieldErrorMessage:
+		return m.OldErrorMessage(ctx)
+	case requestdetailimageartifact.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case requestdetailimageartifact.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown RequestDetailImageArtifact field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RequestDetailImageArtifactMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case requestdetailimageartifact.FieldRequestID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestID(v)
+		return nil
+	case requestdetailimageartifact.FieldDirection:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDirection(v)
+		return nil
+	case requestdetailimageartifact.FieldSource:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSource(v)
+		return nil
+	case requestdetailimageartifact.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case requestdetailimageartifact.FieldS3Key:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetS3Key(v)
+		return nil
+	case requestdetailimageartifact.FieldOriginalURL:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOriginalURL(v)
+		return nil
+	case requestdetailimageartifact.FieldContentType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContentType(v)
+		return nil
+	case requestdetailimageartifact.FieldFileName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFileName(v)
+		return nil
+	case requestdetailimageartifact.FieldSizeBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSizeBytes(v)
+		return nil
+	case requestdetailimageartifact.FieldSha256:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSha256(v)
+		return nil
+	case requestdetailimageartifact.FieldImageIndex:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetImageIndex(v)
+		return nil
+	case requestdetailimageartifact.FieldMetadata:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMetadata(v)
+		return nil
+	case requestdetailimageartifact.FieldErrorMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorMessage(v)
+		return nil
+	case requestdetailimageartifact.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case requestdetailimageartifact.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RequestDetailImageArtifact field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *RequestDetailImageArtifactMutation) AddedFields() []string {
+	var fields []string
+	if m.addsize_bytes != nil {
+		fields = append(fields, requestdetailimageartifact.FieldSizeBytes)
+	}
+	if m.addimage_index != nil {
+		fields = append(fields, requestdetailimageartifact.FieldImageIndex)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *RequestDetailImageArtifactMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case requestdetailimageartifact.FieldSizeBytes:
+		return m.AddedSizeBytes()
+	case requestdetailimageartifact.FieldImageIndex:
+		return m.AddedImageIndex()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RequestDetailImageArtifactMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case requestdetailimageartifact.FieldSizeBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSizeBytes(v)
+		return nil
+	case requestdetailimageartifact.FieldImageIndex:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddImageIndex(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RequestDetailImageArtifact numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *RequestDetailImageArtifactMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(requestdetailimageartifact.FieldImageIndex) {
+		fields = append(fields, requestdetailimageartifact.FieldImageIndex)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *RequestDetailImageArtifactMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *RequestDetailImageArtifactMutation) ClearField(name string) error {
+	switch name {
+	case requestdetailimageartifact.FieldImageIndex:
+		m.ClearImageIndex()
+		return nil
+	}
+	return fmt.Errorf("unknown RequestDetailImageArtifact nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *RequestDetailImageArtifactMutation) ResetField(name string) error {
+	switch name {
+	case requestdetailimageartifact.FieldRequestID:
+		m.ResetRequestID()
+		return nil
+	case requestdetailimageartifact.FieldDirection:
+		m.ResetDirection()
+		return nil
+	case requestdetailimageartifact.FieldSource:
+		m.ResetSource()
+		return nil
+	case requestdetailimageartifact.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case requestdetailimageartifact.FieldS3Key:
+		m.ResetS3Key()
+		return nil
+	case requestdetailimageartifact.FieldOriginalURL:
+		m.ResetOriginalURL()
+		return nil
+	case requestdetailimageartifact.FieldContentType:
+		m.ResetContentType()
+		return nil
+	case requestdetailimageartifact.FieldFileName:
+		m.ResetFileName()
+		return nil
+	case requestdetailimageartifact.FieldSizeBytes:
+		m.ResetSizeBytes()
+		return nil
+	case requestdetailimageartifact.FieldSha256:
+		m.ResetSha256()
+		return nil
+	case requestdetailimageartifact.FieldImageIndex:
+		m.ResetImageIndex()
+		return nil
+	case requestdetailimageartifact.FieldMetadata:
+		m.ResetMetadata()
+		return nil
+	case requestdetailimageartifact.FieldErrorMessage:
+		m.ResetErrorMessage()
+		return nil
+	case requestdetailimageartifact.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case requestdetailimageartifact.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown RequestDetailImageArtifact field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *RequestDetailImageArtifactMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *RequestDetailImageArtifactMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *RequestDetailImageArtifactMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *RequestDetailImageArtifactMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *RequestDetailImageArtifactMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *RequestDetailImageArtifactMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *RequestDetailImageArtifactMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown RequestDetailImageArtifact unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *RequestDetailImageArtifactMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown RequestDetailImageArtifact edge %s", name)
 }
 
 // SecuritySecretMutation represents an operation that mutates the SecuritySecret nodes in the graph.

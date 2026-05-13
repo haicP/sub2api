@@ -39,6 +39,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/requestdetail"
+	"github.com/Wei-Shaw/sub2api/ent/requestdetailimageartifact"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -107,6 +108,8 @@ type Client struct {
 	RedeemCode *RedeemCodeClient
 	// RequestDetail is the client for interacting with the RequestDetail builders.
 	RequestDetail *RequestDetailClient
+	// RequestDetailImageArtifact is the client for interacting with the RequestDetailImageArtifact builders.
+	RequestDetailImageArtifact *RequestDetailImageArtifactClient
 	// SecuritySecret is the client for interacting with the SecuritySecret builders.
 	SecuritySecret *SecuritySecretClient
 	// Setting is the client for interacting with the Setting builders.
@@ -164,6 +167,7 @@ func (c *Client) init() {
 	c.Proxy = NewProxyClient(c.config)
 	c.RedeemCode = NewRedeemCodeClient(c.config)
 	c.RequestDetail = NewRequestDetailClient(c.config)
+	c.RequestDetailImageArtifact = NewRequestDetailImageArtifactClient(c.config)
 	c.SecuritySecret = NewSecuritySecretClient(c.config)
 	c.Setting = NewSettingClient(c.config)
 	c.SubscriptionPlan = NewSubscriptionPlanClient(c.config)
@@ -291,6 +295,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Proxy:                         NewProxyClient(cfg),
 		RedeemCode:                    NewRedeemCodeClient(cfg),
 		RequestDetail:                 NewRequestDetailClient(cfg),
+		RequestDetailImageArtifact:    NewRequestDetailImageArtifactClient(cfg),
 		SecuritySecret:                NewSecuritySecretClient(cfg),
 		Setting:                       NewSettingClient(cfg),
 		SubscriptionPlan:              NewSubscriptionPlanClient(cfg),
@@ -345,6 +350,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Proxy:                         NewProxyClient(cfg),
 		RedeemCode:                    NewRedeemCodeClient(cfg),
 		RequestDetail:                 NewRequestDetailClient(cfg),
+		RequestDetailImageArtifact:    NewRequestDetailImageArtifactClient(cfg),
 		SecuritySecret:                NewSecuritySecretClient(cfg),
 		Setting:                       NewSettingClient(cfg),
 		SubscriptionPlan:              NewSubscriptionPlanClient(cfg),
@@ -391,10 +397,11 @@ func (c *Client) Use(hooks ...Hook) {
 		c.ChannelMonitorRequestTemplate, c.ErrorPassthroughRule, c.Group,
 		c.IdempotencyRecord, c.IdentityAdoptionDecision, c.PaymentAuditLog,
 		c.PaymentOrder, c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode,
-		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.RequestDetail, c.SecuritySecret,
-		c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile, c.UsageCleanupTask,
-		c.UsageLog, c.User, c.UserAllowedGroup, c.UserAttributeDefinition,
-		c.UserAttributeValue, c.UserSubscription,
+		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.RequestDetail,
+		c.RequestDetailImageArtifact, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
+		c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
+		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
+		c.UserSubscription,
 	} {
 		n.Use(hooks...)
 	}
@@ -410,10 +417,11 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.ChannelMonitorRequestTemplate, c.ErrorPassthroughRule, c.Group,
 		c.IdempotencyRecord, c.IdentityAdoptionDecision, c.PaymentAuditLog,
 		c.PaymentOrder, c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode,
-		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.RequestDetail, c.SecuritySecret,
-		c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile, c.UsageCleanupTask,
-		c.UsageLog, c.User, c.UserAllowedGroup, c.UserAttributeDefinition,
-		c.UserAttributeValue, c.UserSubscription,
+		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.RequestDetail,
+		c.RequestDetailImageArtifact, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
+		c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
+		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
+		c.UserSubscription,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -470,6 +478,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.RedeemCode.mutate(ctx, m)
 	case *RequestDetailMutation:
 		return c.RequestDetail.mutate(ctx, m)
+	case *RequestDetailImageArtifactMutation:
+		return c.RequestDetailImageArtifact.mutate(ctx, m)
 	case *SecuritySecretMutation:
 		return c.SecuritySecret.mutate(ctx, m)
 	case *SettingMutation:
@@ -4304,6 +4314,139 @@ func (c *RequestDetailClient) mutate(ctx context.Context, m *RequestDetailMutati
 	}
 }
 
+// RequestDetailImageArtifactClient is a client for the RequestDetailImageArtifact schema.
+type RequestDetailImageArtifactClient struct {
+	config
+}
+
+// NewRequestDetailImageArtifactClient returns a client for the RequestDetailImageArtifact from the given config.
+func NewRequestDetailImageArtifactClient(c config) *RequestDetailImageArtifactClient {
+	return &RequestDetailImageArtifactClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `requestdetailimageartifact.Hooks(f(g(h())))`.
+func (c *RequestDetailImageArtifactClient) Use(hooks ...Hook) {
+	c.hooks.RequestDetailImageArtifact = append(c.hooks.RequestDetailImageArtifact, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `requestdetailimageartifact.Intercept(f(g(h())))`.
+func (c *RequestDetailImageArtifactClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RequestDetailImageArtifact = append(c.inters.RequestDetailImageArtifact, interceptors...)
+}
+
+// Create returns a builder for creating a RequestDetailImageArtifact entity.
+func (c *RequestDetailImageArtifactClient) Create() *RequestDetailImageArtifactCreate {
+	mutation := newRequestDetailImageArtifactMutation(c.config, OpCreate)
+	return &RequestDetailImageArtifactCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RequestDetailImageArtifact entities.
+func (c *RequestDetailImageArtifactClient) CreateBulk(builders ...*RequestDetailImageArtifactCreate) *RequestDetailImageArtifactCreateBulk {
+	return &RequestDetailImageArtifactCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RequestDetailImageArtifactClient) MapCreateBulk(slice any, setFunc func(*RequestDetailImageArtifactCreate, int)) *RequestDetailImageArtifactCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RequestDetailImageArtifactCreateBulk{err: fmt.Errorf("calling to RequestDetailImageArtifactClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RequestDetailImageArtifactCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RequestDetailImageArtifactCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RequestDetailImageArtifact.
+func (c *RequestDetailImageArtifactClient) Update() *RequestDetailImageArtifactUpdate {
+	mutation := newRequestDetailImageArtifactMutation(c.config, OpUpdate)
+	return &RequestDetailImageArtifactUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RequestDetailImageArtifactClient) UpdateOne(_m *RequestDetailImageArtifact) *RequestDetailImageArtifactUpdateOne {
+	mutation := newRequestDetailImageArtifactMutation(c.config, OpUpdateOne, withRequestDetailImageArtifact(_m))
+	return &RequestDetailImageArtifactUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RequestDetailImageArtifactClient) UpdateOneID(id int64) *RequestDetailImageArtifactUpdateOne {
+	mutation := newRequestDetailImageArtifactMutation(c.config, OpUpdateOne, withRequestDetailImageArtifactID(id))
+	return &RequestDetailImageArtifactUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RequestDetailImageArtifact.
+func (c *RequestDetailImageArtifactClient) Delete() *RequestDetailImageArtifactDelete {
+	mutation := newRequestDetailImageArtifactMutation(c.config, OpDelete)
+	return &RequestDetailImageArtifactDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RequestDetailImageArtifactClient) DeleteOne(_m *RequestDetailImageArtifact) *RequestDetailImageArtifactDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RequestDetailImageArtifactClient) DeleteOneID(id int64) *RequestDetailImageArtifactDeleteOne {
+	builder := c.Delete().Where(requestdetailimageartifact.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RequestDetailImageArtifactDeleteOne{builder}
+}
+
+// Query returns a query builder for RequestDetailImageArtifact.
+func (c *RequestDetailImageArtifactClient) Query() *RequestDetailImageArtifactQuery {
+	return &RequestDetailImageArtifactQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRequestDetailImageArtifact},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RequestDetailImageArtifact entity by its id.
+func (c *RequestDetailImageArtifactClient) Get(ctx context.Context, id int64) (*RequestDetailImageArtifact, error) {
+	return c.Query().Where(requestdetailimageartifact.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RequestDetailImageArtifactClient) GetX(ctx context.Context, id int64) *RequestDetailImageArtifact {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *RequestDetailImageArtifactClient) Hooks() []Hook {
+	return c.hooks.RequestDetailImageArtifact
+}
+
+// Interceptors returns the client interceptors.
+func (c *RequestDetailImageArtifactClient) Interceptors() []Interceptor {
+	return c.inters.RequestDetailImageArtifact
+}
+
+func (c *RequestDetailImageArtifactClient) mutate(ctx context.Context, m *RequestDetailImageArtifactMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RequestDetailImageArtifactCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RequestDetailImageArtifactUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RequestDetailImageArtifactUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RequestDetailImageArtifactDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RequestDetailImageArtifact mutation op: %q", m.Op())
+	}
+}
+
 // SecuritySecretClient is a client for the SecuritySecret schema.
 type SecuritySecretClient struct {
 	config
@@ -6164,10 +6307,10 @@ type (
 		ChannelMonitorHistory, ChannelMonitorRequestTemplate, ErrorPassthroughRule,
 		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
 		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
-		PromoCodeUsage, Proxy, RedeemCode, RequestDetail, SecuritySecret, Setting,
-		SubscriptionPlan, TLSFingerprintProfile, UsageCleanupTask, UsageLog, User,
-		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserSubscription []ent.Hook
+		PromoCodeUsage, Proxy, RedeemCode, RequestDetail, RequestDetailImageArtifact,
+		SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
+		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
+		UserAttributeValue, UserSubscription []ent.Hook
 	}
 	inters struct {
 		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
@@ -6175,10 +6318,10 @@ type (
 		ChannelMonitorHistory, ChannelMonitorRequestTemplate, ErrorPassthroughRule,
 		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
 		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
-		PromoCodeUsage, Proxy, RedeemCode, RequestDetail, SecuritySecret, Setting,
-		SubscriptionPlan, TLSFingerprintProfile, UsageCleanupTask, UsageLog, User,
-		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserSubscription []ent.Interceptor
+		PromoCodeUsage, Proxy, RedeemCode, RequestDetail, RequestDetailImageArtifact,
+		SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
+		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
+		UserAttributeValue, UserSubscription []ent.Interceptor
 	}
 )
 

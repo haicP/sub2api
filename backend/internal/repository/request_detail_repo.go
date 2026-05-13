@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -189,6 +190,11 @@ func (r *requestDetailRepository) GetByID(ctx context.Context, id int64) (*servi
 	if err != nil {
 		return nil, err
 	}
+	artifacts, err := r.ListImageArtifactsByRequestID(ctx, detail.RequestID)
+	if err != nil {
+		return nil, err
+	}
+	detail.ImageArtifacts = artifacts
 	return detail, nil
 }
 
@@ -211,6 +217,11 @@ func (r *requestDetailRepository) StreamAll(ctx context.Context, filters service
 		if err != nil {
 			return err
 		}
+		artifacts, err := r.ListImageArtifactsByRequestID(ctx, detail.RequestID)
+		if err != nil {
+			return err
+		}
+		detail.ImageArtifacts = artifacts
 		if err := write(*detail); err != nil {
 			return err
 		}
@@ -218,7 +229,128 @@ func (r *requestDetailRepository) StreamAll(ctx context.Context, filters service
 	return rows.Err()
 }
 
+func (r *requestDetailRepository) CreateImageArtifacts(ctx context.Context, artifacts []service.RequestDetailImageArtifact) error {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	requestIDs := make(map[string]struct{})
+	for _, artifact := range artifacts {
+		requestID := strings.TrimSpace(artifact.RequestID)
+		if requestID != "" {
+			requestIDs[requestID] = struct{}{}
+		}
+	}
+	for requestID := range requestIDs {
+		if _, err := r.sql.ExecContext(ctx, `DELETE FROM request_detail_image_artifacts WHERE request_id = $1`, requestID); err != nil {
+			return err
+		}
+	}
+	query := `
+		INSERT INTO request_detail_image_artifacts (
+			request_id, direction, source, status, s3_key, original_url,
+			content_type, file_name, size_bytes, sha256, image_index,
+			metadata, error_message, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10, $11,
+			$12::jsonb, $13, $14, $15
+		)
+	`
+	for _, artifact := range artifacts {
+		if strings.TrimSpace(artifact.RequestID) == "" {
+			continue
+		}
+		metadata, err := json.Marshal(nonNilMetadataMap(artifact.Metadata))
+		if err != nil {
+			return fmt.Errorf("marshal image artifact metadata: %w", err)
+		}
+		createdAt := artifact.CreatedAt
+		if createdAt.IsZero() {
+			createdAt = timeNowUTC()
+		}
+		updatedAt := artifact.UpdatedAt
+		if updatedAt.IsZero() {
+			updatedAt = createdAt
+		}
+		if _, err := r.sql.ExecContext(
+			ctx,
+			query,
+			artifact.RequestID,
+			artifact.Direction,
+			artifact.Source,
+			artifact.Status,
+			artifact.S3Key,
+			artifact.OriginalURL,
+			artifact.ContentType,
+			artifact.FileName,
+			artifact.SizeBytes,
+			artifact.SHA256,
+			artifact.ImageIndex,
+			string(metadata),
+			artifact.ErrorMessage,
+			createdAt,
+			updatedAt,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *requestDetailRepository) ListImageArtifactsByRequestID(ctx context.Context, requestID string) ([]service.RequestDetailImageArtifact, error) {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return []service.RequestDetailImageArtifact{}, nil
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT id, request_id, direction, source, status, s3_key, original_url,
+			content_type, file_name, size_bytes, sha256, image_index,
+			metadata, error_message, created_at, updated_at
+		FROM request_detail_image_artifacts
+		WHERE request_id = $1
+		ORDER BY id ASC
+	`, requestID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	return scanRequestDetailImageArtifactRows(rows)
+}
+
+func (r *requestDetailRepository) GetImageArtifact(ctx context.Context, requestID string, artifactID int64) (*service.RequestDetailImageArtifact, error) {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" || artifactID <= 0 {
+		return nil, service.ErrRequestDetailNotFound
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT id, request_id, direction, source, status, s3_key, original_url,
+			content_type, file_name, size_bytes, sha256, image_index,
+			metadata, error_message, created_at, updated_at
+		FROM request_detail_image_artifacts
+		WHERE request_id = $1 AND id = $2
+	`, requestID, artifactID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, service.ErrRequestDetailNotFound
+	}
+	item, err := scanRequestDetailImageArtifact(rows)
+	if err != nil {
+		return nil, err
+	}
+	return item, rows.Err()
+}
+
 type requestDetailScanner interface {
+	Scan(dest ...any) error
+}
+
+type requestDetailImageArtifactScanner interface {
 	Scan(dest ...any) error
 }
 
@@ -235,6 +367,60 @@ func scanRequestDetailRows(rows *sql.Rows) ([]service.RequestDetail, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+func scanRequestDetailImageArtifactRows(rows *sql.Rows) ([]service.RequestDetailImageArtifact, error) {
+	items := make([]service.RequestDetailImageArtifact, 0)
+	for rows.Next() {
+		item, err := scanRequestDetailImageArtifact(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func scanRequestDetailImageArtifact(scanner requestDetailImageArtifactScanner) (*service.RequestDetailImageArtifact, error) {
+	var (
+		item        service.RequestDetailImageArtifact
+		imageIndex  sql.NullInt64
+		metadataRaw []byte
+	)
+	if err := scanner.Scan(
+		&item.ID,
+		&item.RequestID,
+		&item.Direction,
+		&item.Source,
+		&item.Status,
+		&item.S3Key,
+		&item.OriginalURL,
+		&item.ContentType,
+		&item.FileName,
+		&item.SizeBytes,
+		&item.SHA256,
+		&imageIndex,
+		&metadataRaw,
+		&item.ErrorMessage,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+	if imageIndex.Valid {
+		v := int(imageIndex.Int64)
+		item.ImageIndex = &v
+	}
+	if len(metadataRaw) > 0 {
+		item.Metadata = map[string]any{}
+		if err := json.Unmarshal(metadataRaw, &item.Metadata); err != nil {
+			return nil, fmt.Errorf("unmarshal image artifact metadata: %w", err)
+		}
+	}
+	return &item, nil
 }
 
 func scanRequestDetail(scanner requestDetailScanner) (*service.RequestDetail, error) {
@@ -423,6 +609,17 @@ func nonNilHeaderMap(value map[string][]string) map[string][]string {
 		return map[string][]string{}
 	}
 	return value
+}
+
+func nonNilMetadataMap(value map[string]any) map[string]any {
+	if value == nil {
+		return map[string]any{}
+	}
+	return value
+}
+
+func timeNowUTC() time.Time {
+	return time.Now().UTC()
 }
 
 func normalizeRequestDetailSort(value string) string {

@@ -40,6 +40,18 @@ func (s *requestDetailRepoStub) StreamAll(context.Context, service.RequestDetail
 	return nil
 }
 
+func (s *requestDetailRepoStub) CreateImageArtifacts(context.Context, []service.RequestDetailImageArtifact) error {
+	return nil
+}
+
+func (s *requestDetailRepoStub) ListImageArtifactsByRequestID(context.Context, string) ([]service.RequestDetailImageArtifact, error) {
+	return nil, nil
+}
+
+func (s *requestDetailRepoStub) GetImageArtifact(context.Context, string, int64) (*service.RequestDetailImageArtifact, error) {
+	return nil, nil
+}
+
 func TestRequestDetailHandlerListParsesFilters(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &requestDetailRepoStub{}

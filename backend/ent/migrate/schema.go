@@ -1235,6 +1235,43 @@ var (
 			},
 		},
 	}
+	// RequestDetailImageArtifactsColumns holds the columns for the "request_detail_image_artifacts" table.
+	RequestDetailImageArtifactsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "request_id", Type: field.TypeString, Size: 64},
+		{Name: "direction", Type: field.TypeString, Size: 16, Default: ""},
+		{Name: "source", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "status", Type: field.TypeString, Size: 16, Default: ""},
+		{Name: "s3_key", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "original_url", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "content_type", Type: field.TypeString, Size: 128, Default: ""},
+		{Name: "file_name", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "size_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "sha256", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "image_index", Type: field.TypeInt, Nullable: true},
+		{Name: "metadata", Type: field.TypeJSON, Default: map[string]schema.Expr{"postgres": "'{}'::jsonb", "sqlite3": "'{}'"}},
+		{Name: "error_message", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// RequestDetailImageArtifactsTable holds the schema information for the "request_detail_image_artifacts" table.
+	RequestDetailImageArtifactsTable = &schema.Table{
+		Name:       "request_detail_image_artifacts",
+		Columns:    RequestDetailImageArtifactsColumns,
+		PrimaryKey: []*schema.Column{RequestDetailImageArtifactsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_request_detail_image_artifacts_request_id",
+				Unique:  false,
+				Columns: []*schema.Column{RequestDetailImageArtifactsColumns[1], RequestDetailImageArtifactsColumns[0]},
+			},
+			{
+				Name:    "idx_request_detail_image_artifacts_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{RequestDetailImageArtifactsColumns[14]},
+			},
+		},
+	}
 	// SecuritySecretsColumns holds the columns for the "security_secrets" table.
 	SecuritySecretsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -1779,6 +1816,7 @@ var (
 		ProxiesTable,
 		RedeemCodesTable,
 		RequestDetailsTable,
+		RequestDetailImageArtifactsTable,
 		SecuritySecretsTable,
 		SettingsTable,
 		SubscriptionPlansTable,
@@ -1885,6 +1923,9 @@ func init() {
 	}
 	RequestDetailsTable.Annotation = &entsql.Annotation{
 		Table: "request_details",
+	}
+	RequestDetailImageArtifactsTable.Annotation = &entsql.Annotation{
+		Table: "request_detail_image_artifacts",
 	}
 	SecuritySecretsTable.Annotation = &entsql.Annotation{
 		Table: "security_secrets",

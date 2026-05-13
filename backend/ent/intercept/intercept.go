@@ -33,6 +33,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/requestdetail"
+	"github.com/Wei-Shaw/sub2api/ent/requestdetailimageartifact"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -750,6 +751,33 @@ func (f TraverseRequestDetail) Traverse(ctx context.Context, q ent.Query) error 
 	return fmt.Errorf("unexpected query type %T. expect *ent.RequestDetailQuery", q)
 }
 
+// The RequestDetailImageArtifactFunc type is an adapter to allow the use of ordinary function as a Querier.
+type RequestDetailImageArtifactFunc func(context.Context, *ent.RequestDetailImageArtifactQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f RequestDetailImageArtifactFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.RequestDetailImageArtifactQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.RequestDetailImageArtifactQuery", q)
+}
+
+// The TraverseRequestDetailImageArtifact type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseRequestDetailImageArtifact func(context.Context, *ent.RequestDetailImageArtifactQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseRequestDetailImageArtifact) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseRequestDetailImageArtifact) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.RequestDetailImageArtifactQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.RequestDetailImageArtifactQuery", q)
+}
+
 // The SecuritySecretFunc type is an adapter to allow the use of ordinary function as a Querier.
 type SecuritySecretFunc func(context.Context, *ent.SecuritySecretQuery) (ent.Value, error)
 
@@ -1098,6 +1126,8 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.RedeemCodeQuery, predicate.RedeemCode, redeemcode.OrderOption]{typ: ent.TypeRedeemCode, tq: q}, nil
 	case *ent.RequestDetailQuery:
 		return &query[*ent.RequestDetailQuery, predicate.RequestDetail, requestdetail.OrderOption]{typ: ent.TypeRequestDetail, tq: q}, nil
+	case *ent.RequestDetailImageArtifactQuery:
+		return &query[*ent.RequestDetailImageArtifactQuery, predicate.RequestDetailImageArtifact, requestdetailimageartifact.OrderOption]{typ: ent.TypeRequestDetailImageArtifact, tq: q}, nil
 	case *ent.SecuritySecretQuery:
 		return &query[*ent.SecuritySecretQuery, predicate.SecuritySecret, securitysecret.OrderOption]{typ: ent.TypeSecuritySecret, tq: q}, nil
 	case *ent.SettingQuery:

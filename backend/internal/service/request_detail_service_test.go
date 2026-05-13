@@ -34,6 +34,18 @@ func (s *requestDetailRepoStub) StreamAll(context.Context, RequestDetailFilters,
 	return nil
 }
 
+func (s *requestDetailRepoStub) CreateImageArtifacts(context.Context, []RequestDetailImageArtifact) error {
+	return nil
+}
+
+func (s *requestDetailRepoStub) ListImageArtifactsByRequestID(context.Context, string) ([]RequestDetailImageArtifact, error) {
+	return nil, nil
+}
+
+func (s *requestDetailRepoStub) GetImageArtifact(context.Context, string, int64) (*RequestDetailImageArtifact, error) {
+	return nil, nil
+}
+
 func TestRequestDetailServiceCreateAsyncFlushesOnStop(t *testing.T) {
 	repo := &requestDetailRepoStub{}
 	svc := NewRequestDetailService(repo)

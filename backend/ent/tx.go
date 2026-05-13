@@ -62,6 +62,8 @@ type Tx struct {
 	RedeemCode *RedeemCodeClient
 	// RequestDetail is the client for interacting with the RequestDetail builders.
 	RequestDetail *RequestDetailClient
+	// RequestDetailImageArtifact is the client for interacting with the RequestDetailImageArtifact builders.
+	RequestDetailImageArtifact *RequestDetailImageArtifactClient
 	// SecuritySecret is the client for interacting with the SecuritySecret builders.
 	SecuritySecret *SecuritySecretClient
 	// Setting is the client for interacting with the Setting builders.
@@ -239,6 +241,7 @@ func (tx *Tx) init() {
 	tx.Proxy = NewProxyClient(tx.config)
 	tx.RedeemCode = NewRedeemCodeClient(tx.config)
 	tx.RequestDetail = NewRequestDetailClient(tx.config)
+	tx.RequestDetailImageArtifact = NewRequestDetailImageArtifactClient(tx.config)
 	tx.SecuritySecret = NewSecuritySecretClient(tx.config)
 	tx.Setting = NewSettingClient(tx.config)
 	tx.SubscriptionPlan = NewSubscriptionPlanClient(tx.config)

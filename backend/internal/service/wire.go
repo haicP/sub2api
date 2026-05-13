@@ -398,6 +398,7 @@ func ProvideRequestDetailService(repo RequestDetailRepository) *RequestDetailSer
 }
 
 func ProvideRequestDetailBackupService(requestDetailService *RequestDetailService, backupService *BackupService, settingRepo SettingRepository) *RequestDetailBackupService {
+	requestDetailService.SetBackupService(backupService)
 	svc := NewRequestDetailBackupService(requestDetailService, backupService, settingRepo)
 	svc.Start()
 	return svc

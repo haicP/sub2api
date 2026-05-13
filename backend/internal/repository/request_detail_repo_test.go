@@ -133,6 +133,9 @@ func TestRequestDetailRepositoryCreateListAndGet(t *testing.T) {
 	mock.ExpectQuery("FROM request_details WHERE id = \\$1").
 		WithArgs(int64(11)).
 		WillReturnRows(getRows)
+	mock.ExpectQuery("FROM request_detail_image_artifacts").
+		WithArgs("req-detail-1").
+		WillReturnRows(requestDetailImageArtifactRows())
 
 	got, err := repo.GetByID(ctx, 11)
 	require.NoError(t, err)
@@ -142,6 +145,68 @@ func TestRequestDetailRepositoryCreateListAndGet(t *testing.T) {
 	require.Equal(t, responseBody, got.ResponseBody)
 	require.Equal(t, requestHeaders, got.RequestHeaders)
 	require.Equal(t, responseHeaders, got.ResponseHeaders)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRequestDetailRepositoryImageArtifacts(t *testing.T) {
+	ctx := context.Background()
+	db, mock := newSQLMock(t)
+	repo := NewRequestDetailRepository(nil, db)
+
+	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	imageIndex := 2
+	artifact := service.RequestDetailImageArtifact{
+		RequestID:   "req-img",
+		Direction:   "response",
+		Source:      "$.data.0.b64_json",
+		Status:      "stored",
+		S3Key:       "backups/request-detail-images/2026/05/14/req-img/artifact-1.png",
+		ContentType: "image/png",
+		FileName:    "out.png",
+		SizeBytes:   123,
+		SHA256:      "abc",
+		ImageIndex:  &imageIndex,
+		Metadata:    map[string]any{"artifact_ref": "artifact-1"},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	mock.ExpectExec("DELETE FROM request_detail_image_artifacts").
+		WithArgs("req-img").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("INSERT INTO request_detail_image_artifacts").
+		WithArgs(
+			artifact.RequestID,
+			artifact.Direction,
+			artifact.Source,
+			artifact.Status,
+			artifact.S3Key,
+			artifact.OriginalURL,
+			artifact.ContentType,
+			artifact.FileName,
+			artifact.SizeBytes,
+			artifact.SHA256,
+			artifact.ImageIndex,
+			requestDetailJSONArg(t, artifact.Metadata),
+			artifact.ErrorMessage,
+			artifact.CreatedAt,
+			artifact.UpdatedAt,
+		).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	require.NoError(t, repo.CreateImageArtifacts(ctx, []service.RequestDetailImageArtifact{artifact}))
+
+	mock.ExpectQuery("FROM request_detail_image_artifacts").
+		WithArgs("req-img").
+		WillReturnRows(requestDetailImageArtifactRows().
+			AddRow(int64(9), "req-img", "response", "$.data.0.b64_json", "stored", artifact.S3Key, "", "image/png", "out.png", int64(123), "abc", imageIndex, requestDetailMustJSON(t, artifact.Metadata), "", now, now))
+
+	items, err := repo.ListImageArtifactsByRequestID(ctx, "req-img")
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, int64(9), items[0].ID)
+	require.Equal(t, artifact.S3Key, items[0].S3Key)
+	require.NotNil(t, items[0].ImageIndex)
+	require.Equal(t, imageIndex, *items[0].ImageIndex)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -181,6 +246,9 @@ func TestRequestDetailRepositoryStreamAllReturnsFullBodies(t *testing.T) {
 
 	mock.ExpectQuery("FROM request_details\\s+ORDER BY created_at ASC, id ASC").
 		WillReturnRows(rows)
+	mock.ExpectQuery("FROM request_detail_image_artifacts").
+		WithArgs("req-1").
+		WillReturnRows(requestDetailImageArtifactRows())
 
 	var streamed []service.RequestDetail
 	err := repo.StreamAll(ctx, service.RequestDetailFilters{}, func(detail service.RequestDetail) error {
@@ -228,6 +296,27 @@ func requestDetailRows() *sqlmock.Rows {
 		"error_message",
 		"request_body_bytes",
 		"response_body_bytes",
+	})
+}
+
+func requestDetailImageArtifactRows() *sqlmock.Rows {
+	return sqlmock.NewRows([]string{
+		"id",
+		"request_id",
+		"direction",
+		"source",
+		"status",
+		"s3_key",
+		"original_url",
+		"content_type",
+		"file_name",
+		"size_bytes",
+		"sha256",
+		"image_index",
+		"metadata",
+		"error_message",
+		"created_at",
+		"updated_at",
 	})
 }
 

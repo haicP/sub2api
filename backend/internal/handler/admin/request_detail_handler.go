@@ -89,7 +89,7 @@ func (h *RequestDetailHandler) Export(c *gin.Context) {
 		"ID", "Request ID", "Created At", "Completed At", "Duration MS", "Status Code", "Success",
 		"Platform", "Endpoint", "Upstream Endpoint", "Model", "Upstream Model", "Stream",
 		"User ID", "API Key ID", "Account ID", "Group ID", "Subscription ID", "IP Address", "User Agent",
-		"Request Headers", "Request Body", "Upstream Request Body", "Response Headers", "Response Content", "Response Body", "Error Message",
+		"Request Headers", "Request Body", "Upstream Request Body", "Response Headers", "Response Content", "Response Body", "Image Artifacts", "Error Message",
 	}
 	for idx, header := range headers {
 		cell, _ := excelize.CoordinatesToCellName(idx+1, 1)
@@ -123,6 +123,7 @@ func (h *RequestDetailHandler) Export(c *gin.Context) {
 			mustJSON(item.ResponseHeaders),
 			item.ResponseContent,
 			item.ResponseBody,
+			formatImageArtifacts(item.ImageArtifacts),
 			item.ErrorMessage,
 		}
 		for colIdx, value := range values {
@@ -175,6 +176,30 @@ func (h *RequestDetailHandler) GetBackup(c *gin.Context) {
 
 func (h *RequestDetailHandler) GetBackupDownloadURL(c *gin.Context) {
 	url, err := h.backup.GetBackupDownloadURL(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"url": url})
+}
+
+func (h *RequestDetailHandler) GetArtifactDownloadURL(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "invalid request detail id")
+		return
+	}
+	artifactID, err := strconv.ParseInt(c.Param("artifact_id"), 10, 64)
+	if err != nil || artifactID <= 0 {
+		response.BadRequest(c, "invalid artifact id")
+		return
+	}
+	item, err := h.service.GetByID(c.Request.Context(), id)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	url, err := h.service.GetImageArtifactDownloadURL(c.Request.Context(), item.RequestID, artifactID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -326,4 +351,24 @@ func mustJSON(value any) string {
 		return ""
 	}
 	return string(bytes)
+}
+
+func formatImageArtifacts(items []service.RequestDetailImageArtifact) string {
+	if len(items) == 0 {
+		return ""
+	}
+	rows := make([]string, 0, len(items))
+	for _, item := range items {
+		rows = append(rows, fmt.Sprintf(
+			"id=%d status=%s direction=%s source=%s size=%d content_type=%s s3_key=%s",
+			item.ID,
+			item.Status,
+			item.Direction,
+			item.Source,
+			item.SizeBytes,
+			item.ContentType,
+			item.S3Key,
+		))
+	}
+	return strings.Join(rows, "\n")
 }

@@ -213,6 +213,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	adminUsageHandler := admin.NewUsageHandler(usageService, apiKeyService, adminService, usageCleanupService)
 	requestDetailRepository := repository.NewRequestDetailRepository(client, db)
 	requestDetailService := service.ProvideRequestDetailService(requestDetailRepository)
+	requestDetailService.SetBackupService(backupService)
 	requestDetailBackupService := service.ProvideRequestDetailBackupService(requestDetailService, backupService, settingRepository)
 	requestDetailHandler := admin.NewRequestDetailHandler(requestDetailService, requestDetailBackupService)
 	userAttributeDefinitionRepository := repository.NewUserAttributeDefinitionRepository(client)

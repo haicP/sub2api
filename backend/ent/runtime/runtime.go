@@ -29,6 +29,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/requestdetail"
+	"github.com/Wei-Shaw/sub2api/ent/requestdetailimageartifact"
 	"github.com/Wei-Shaw/sub2api/ent/schema"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
@@ -1500,6 +1501,92 @@ func init() {
 	requestdetailDescResponseTruncated := requestdetailFields[26].Descriptor()
 	// requestdetail.DefaultResponseTruncated holds the default value on creation for the response_truncated field.
 	requestdetail.DefaultResponseTruncated = requestdetailDescResponseTruncated.Default.(bool)
+	requestdetailimageartifactFields := schema.RequestDetailImageArtifact{}.Fields()
+	_ = requestdetailimageartifactFields
+	// requestdetailimageartifactDescRequestID is the schema descriptor for request_id field.
+	requestdetailimageartifactDescRequestID := requestdetailimageartifactFields[0].Descriptor()
+	// requestdetailimageartifact.RequestIDValidator is a validator for the "request_id" field. It is called by the builders before save.
+	requestdetailimageartifact.RequestIDValidator = func() func(string) error {
+		validators := requestdetailimageartifactDescRequestID.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(request_id string) error {
+			for _, fn := range fns {
+				if err := fn(request_id); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// requestdetailimageartifactDescDirection is the schema descriptor for direction field.
+	requestdetailimageartifactDescDirection := requestdetailimageartifactFields[1].Descriptor()
+	// requestdetailimageartifact.DefaultDirection holds the default value on creation for the direction field.
+	requestdetailimageartifact.DefaultDirection = requestdetailimageartifactDescDirection.Default.(string)
+	// requestdetailimageartifact.DirectionValidator is a validator for the "direction" field. It is called by the builders before save.
+	requestdetailimageartifact.DirectionValidator = requestdetailimageartifactDescDirection.Validators[0].(func(string) error)
+	// requestdetailimageartifactDescSource is the schema descriptor for source field.
+	requestdetailimageartifactDescSource := requestdetailimageartifactFields[2].Descriptor()
+	// requestdetailimageartifact.DefaultSource holds the default value on creation for the source field.
+	requestdetailimageartifact.DefaultSource = requestdetailimageartifactDescSource.Default.(string)
+	// requestdetailimageartifact.SourceValidator is a validator for the "source" field. It is called by the builders before save.
+	requestdetailimageartifact.SourceValidator = requestdetailimageartifactDescSource.Validators[0].(func(string) error)
+	// requestdetailimageartifactDescStatus is the schema descriptor for status field.
+	requestdetailimageartifactDescStatus := requestdetailimageartifactFields[3].Descriptor()
+	// requestdetailimageartifact.DefaultStatus holds the default value on creation for the status field.
+	requestdetailimageartifact.DefaultStatus = requestdetailimageartifactDescStatus.Default.(string)
+	// requestdetailimageartifact.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	requestdetailimageartifact.StatusValidator = requestdetailimageartifactDescStatus.Validators[0].(func(string) error)
+	// requestdetailimageartifactDescS3Key is the schema descriptor for s3_key field.
+	requestdetailimageartifactDescS3Key := requestdetailimageartifactFields[4].Descriptor()
+	// requestdetailimageartifact.DefaultS3Key holds the default value on creation for the s3_key field.
+	requestdetailimageartifact.DefaultS3Key = requestdetailimageartifactDescS3Key.Default.(string)
+	// requestdetailimageartifactDescOriginalURL is the schema descriptor for original_url field.
+	requestdetailimageartifactDescOriginalURL := requestdetailimageartifactFields[5].Descriptor()
+	// requestdetailimageartifact.DefaultOriginalURL holds the default value on creation for the original_url field.
+	requestdetailimageartifact.DefaultOriginalURL = requestdetailimageartifactDescOriginalURL.Default.(string)
+	// requestdetailimageartifactDescContentType is the schema descriptor for content_type field.
+	requestdetailimageartifactDescContentType := requestdetailimageartifactFields[6].Descriptor()
+	// requestdetailimageartifact.DefaultContentType holds the default value on creation for the content_type field.
+	requestdetailimageartifact.DefaultContentType = requestdetailimageartifactDescContentType.Default.(string)
+	// requestdetailimageartifact.ContentTypeValidator is a validator for the "content_type" field. It is called by the builders before save.
+	requestdetailimageartifact.ContentTypeValidator = requestdetailimageartifactDescContentType.Validators[0].(func(string) error)
+	// requestdetailimageartifactDescFileName is the schema descriptor for file_name field.
+	requestdetailimageartifactDescFileName := requestdetailimageartifactFields[7].Descriptor()
+	// requestdetailimageartifact.DefaultFileName holds the default value on creation for the file_name field.
+	requestdetailimageartifact.DefaultFileName = requestdetailimageartifactDescFileName.Default.(string)
+	// requestdetailimageartifact.FileNameValidator is a validator for the "file_name" field. It is called by the builders before save.
+	requestdetailimageartifact.FileNameValidator = requestdetailimageartifactDescFileName.Validators[0].(func(string) error)
+	// requestdetailimageartifactDescSizeBytes is the schema descriptor for size_bytes field.
+	requestdetailimageartifactDescSizeBytes := requestdetailimageartifactFields[8].Descriptor()
+	// requestdetailimageartifact.DefaultSizeBytes holds the default value on creation for the size_bytes field.
+	requestdetailimageartifact.DefaultSizeBytes = requestdetailimageartifactDescSizeBytes.Default.(int64)
+	// requestdetailimageartifactDescSha256 is the schema descriptor for sha256 field.
+	requestdetailimageartifactDescSha256 := requestdetailimageartifactFields[9].Descriptor()
+	// requestdetailimageartifact.DefaultSha256 holds the default value on creation for the sha256 field.
+	requestdetailimageartifact.DefaultSha256 = requestdetailimageartifactDescSha256.Default.(string)
+	// requestdetailimageartifact.Sha256Validator is a validator for the "sha256" field. It is called by the builders before save.
+	requestdetailimageartifact.Sha256Validator = requestdetailimageartifactDescSha256.Validators[0].(func(string) error)
+	// requestdetailimageartifactDescMetadata is the schema descriptor for metadata field.
+	requestdetailimageartifactDescMetadata := requestdetailimageartifactFields[11].Descriptor()
+	// requestdetailimageartifact.DefaultMetadata holds the default value on creation for the metadata field.
+	requestdetailimageartifact.DefaultMetadata = requestdetailimageartifactDescMetadata.Default.(map[string]interface{})
+	// requestdetailimageartifactDescErrorMessage is the schema descriptor for error_message field.
+	requestdetailimageartifactDescErrorMessage := requestdetailimageartifactFields[12].Descriptor()
+	// requestdetailimageartifact.DefaultErrorMessage holds the default value on creation for the error_message field.
+	requestdetailimageartifact.DefaultErrorMessage = requestdetailimageartifactDescErrorMessage.Default.(string)
+	// requestdetailimageartifactDescCreatedAt is the schema descriptor for created_at field.
+	requestdetailimageartifactDescCreatedAt := requestdetailimageartifactFields[13].Descriptor()
+	// requestdetailimageartifact.DefaultCreatedAt holds the default value on creation for the created_at field.
+	requestdetailimageartifact.DefaultCreatedAt = requestdetailimageartifactDescCreatedAt.Default.(func() time.Time)
+	// requestdetailimageartifactDescUpdatedAt is the schema descriptor for updated_at field.
+	requestdetailimageartifactDescUpdatedAt := requestdetailimageartifactFields[14].Descriptor()
+	// requestdetailimageartifact.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	requestdetailimageartifact.DefaultUpdatedAt = requestdetailimageartifactDescUpdatedAt.Default.(func() time.Time)
+	// requestdetailimageartifact.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	requestdetailimageartifact.UpdateDefaultUpdatedAt = requestdetailimageartifactDescUpdatedAt.UpdateDefault.(func() time.Time)
 	securitysecretMixin := schema.SecuritySecret{}.Mixin()
 	securitysecretMixinFields0 := securitysecretMixin[0].Fields()
 	_ = securitysecretMixinFields0
