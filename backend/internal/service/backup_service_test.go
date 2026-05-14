@@ -159,13 +159,15 @@ func (d *blockingDumper) Restore(_ context.Context, data io.Reader) error {
 }
 
 type mockObjectStore struct {
-	objects     map[string][]byte
-	mu          sync.Mutex
-	uploadCount int
-	deleteCount int
-	uploadErr   error
-	deleteErr   error
-	headErr     error
+	objects             map[string][]byte
+	mu                  sync.Mutex
+	uploadCount         int
+	deleteCount         int
+	uploadErr           error
+	deleteErr           error
+	headErr             error
+	headObjectErr       error
+	headObjectSizeDelta int64
 }
 
 func newMockObjectStore() *mockObjectStore {
@@ -185,8 +187,19 @@ func (m *mockObjectStore) Upload(_ context.Context, key string, body io.Reader, 
 		return 0, err
 	}
 	m.objects[key] = data
+	if m.headObjectErr != nil {
+		err := fmt.Errorf("S3 HeadObject after PutObject: %w", m.headObjectErr)
+		m.mu.Unlock()
+		return 0, err
+	}
+	sizeBytes := int64(len(data)) + m.headObjectSizeDelta
+	if sizeBytes != int64(len(data)) {
+		err := fmt.Errorf("S3 HeadObject size mismatch after PutObject: uploaded=%d stored=%d key=%s", len(data), sizeBytes, key)
+		m.mu.Unlock()
+		return 0, err
+	}
 	m.mu.Unlock()
-	return int64(len(data)), nil
+	return sizeBytes, nil
 }
 
 func (m *mockObjectStore) Download(_ context.Context, key string) (io.ReadCloser, error) {
@@ -220,6 +233,19 @@ func (m *mockObjectStore) HeadBucket(_ context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.headErr
+}
+
+func (m *mockObjectStore) HeadObject(_ context.Context, key string) (*BackupObjectInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.headObjectErr != nil {
+		return nil, m.headObjectErr
+	}
+	data, ok := m.objects[key]
+	if !ok {
+		return nil, fmt.Errorf("not found: %s", key)
+	}
+	return &BackupObjectInfo{SizeBytes: int64(len(data)) + m.headObjectSizeDelta}, nil
 }
 
 func newTestBackupService(repo *mockSettingRepo, dumper DBDumper, store *mockObjectStore) *BackupService {
@@ -370,6 +396,36 @@ func TestBackupService_CreateBackup_Streaming(t *testing.T) {
 	store.mu.Lock()
 	require.Len(t, store.objects, 1)
 	store.mu.Unlock()
+}
+
+func TestBackupService_CreateBackup_HeadObjectFailureIsRecorded(t *testing.T) {
+	repo := newMockSettingRepo()
+	seedS3Config(t, repo)
+
+	dumper := &mockDumper{dumpData: []byte("-- PostgreSQL dump\n")}
+	store := newMockObjectStore()
+	store.headObjectErr = fmt.Errorf("not found")
+	svc := newTestBackupService(repo, dumper, store)
+
+	record, err := svc.CreateBackup(context.Background(), "manual", 14)
+	require.Error(t, err)
+	require.Equal(t, "failed", record.Status)
+	require.Contains(t, record.ErrorMsg, "HeadObject")
+}
+
+func TestBackupService_CreateBackup_HeadObjectSizeMismatchIsRecorded(t *testing.T) {
+	repo := newMockSettingRepo()
+	seedS3Config(t, repo)
+
+	dumper := &mockDumper{dumpData: []byte("-- PostgreSQL dump\n")}
+	store := newMockObjectStore()
+	store.headObjectSizeDelta = 1
+	svc := newTestBackupService(repo, dumper, store)
+
+	record, err := svc.CreateBackup(context.Background(), "manual", 14)
+	require.Error(t, err)
+	require.Equal(t, "failed", record.Status)
+	require.Contains(t, record.ErrorMsg, "size mismatch")
 }
 
 func TestBackupService_CreateBackup_DumpFailure(t *testing.T) {

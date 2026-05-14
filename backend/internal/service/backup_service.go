@@ -54,6 +54,7 @@ type BackupObjectStore interface {
 	Delete(ctx context.Context, key string) error
 	PresignURL(ctx context.Context, key string, expiry time.Duration) (string, error)
 	HeadBucket(ctx context.Context) error
+	HeadObject(ctx context.Context, key string) (*BackupObjectInfo, error)
 }
 
 // BackupObjectStoreFactory creates an object store from S3 config
@@ -70,6 +71,12 @@ type BackupS3Config struct {
 	SecretAccessKey string `json:"secret_access_key,omitempty"` //nolint:revive // field name follows AWS convention
 	Prefix          string `json:"prefix"`                      // S3 key 前缀，如 "backups/"
 	ForcePathStyle  bool   `json:"force_path_style"`
+}
+
+type BackupObjectInfo struct {
+	SizeBytes    int64
+	ETag         string
+	LastModified time.Time
 }
 
 // IsConfigured 检查必要字段是否已配置
@@ -568,6 +575,13 @@ func (s *BackupService) CreateBackup(ctx context.Context, triggeredBy string, ex
 		return record, fmt.Errorf("backup upload: %w", err)
 	}
 	<-gzipDone // 确保 gzip goroutine 已退出
+	if sizeBytes <= 0 {
+		record.Status = "failed"
+		record.ErrorMsg = fmt.Sprintf("S3 upload verification failed: object size is %d bytes key=%s content_type=%s", sizeBytes, s3Key, contentType)
+		record.FinishedAt = time.Now().Format(time.RFC3339)
+		_ = s.saveRecord(ctx, record)
+		return record, fmt.Errorf("backup upload verification: object size is %d bytes", sizeBytes)
+	}
 
 	record.SizeBytes = sizeBytes
 	record.Status = "completed"
@@ -737,6 +751,14 @@ func (s *BackupService) executeBackup(record *BackupRecord, objectStore BackupOb
 		return
 	}
 	<-gzipDone // 确保 gzip goroutine 已退出
+	if sizeBytes <= 0 {
+		record.Status = "failed"
+		record.ErrorMsg = fmt.Sprintf("S3 upload verification failed: object size is %d bytes key=%s content_type=%s", sizeBytes, record.S3Key, contentType)
+		record.Progress = ""
+		record.FinishedAt = time.Now().Format(time.RFC3339)
+		_ = s.saveRecord(context.Background(), record)
+		return
+	}
 
 	record.SizeBytes = sizeBytes
 	record.Status = "completed"

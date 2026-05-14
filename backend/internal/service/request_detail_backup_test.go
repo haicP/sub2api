@@ -153,10 +153,12 @@ func (s *requestDetailBackupBlockingRepoStub) StreamAll(ctx context.Context, _ R
 }
 
 type requestDetailBackupStoreStub struct {
-	mu        sync.Mutex
-	uploadCh  chan struct{}
-	uploadErr error
-	objects   map[string][]byte
+	mu                  sync.Mutex
+	uploadCh            chan struct{}
+	uploadErr           error
+	headObjectErr       error
+	headObjectSizeDelta int64
+	objects             map[string][]byte
 }
 
 func newRequestDetailBackupStoreStub() *requestDetailBackupStoreStub {
@@ -178,7 +180,14 @@ func (s *requestDetailBackupStoreStub) Upload(_ context.Context, key string, bod
 		return 0, s.uploadErr
 	}
 	s.objects[key] = data
-	return int64(len(data)), nil
+	if s.headObjectErr != nil {
+		return 0, fmt.Errorf("S3 HeadObject after PutObject: %w", s.headObjectErr)
+	}
+	sizeBytes := int64(len(data)) + s.headObjectSizeDelta
+	if sizeBytes != int64(len(data)) {
+		return 0, fmt.Errorf("S3 HeadObject size mismatch after PutObject: uploaded=%d stored=%d key=%s", len(data), sizeBytes, key)
+	}
+	return sizeBytes, nil
 }
 
 func (s *requestDetailBackupStoreStub) Download(_ context.Context, key string) (io.ReadCloser, error) {
@@ -198,6 +207,19 @@ func (s *requestDetailBackupStoreStub) PresignURL(_ context.Context, key string,
 }
 
 func (s *requestDetailBackupStoreStub) HeadBucket(_ context.Context) error { return nil }
+
+func (s *requestDetailBackupStoreStub) HeadObject(_ context.Context, key string) (*BackupObjectInfo, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.headObjectErr != nil {
+		return nil, s.headObjectErr
+	}
+	data, ok := s.objects[key]
+	if !ok {
+		return nil, fmt.Errorf("not found")
+	}
+	return &BackupObjectInfo{SizeBytes: int64(len(data)) + s.headObjectSizeDelta}, nil
+}
 
 func newRequestDetailBackupTestService(repo RequestDetailRepository, store BackupObjectStore, settings *requestDetailBackupSettingRepoStub) *RequestDetailBackupService {
 	if settings == nil {
@@ -269,5 +291,53 @@ func TestRequestDetailBackupStartBackupUploadFailureIsRecordedAsync(t *testing.T
 	require.Eventually(t, func() bool {
 		final, err := svc.GetBackupRecord(context.Background(), record.ID)
 		return err == nil && final.Status == "failed" && strings.Contains(final.ErrorMsg, "S3 PutObject failed")
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestRequestDetailBackupStartBackupHeadObjectFailureIsRecordedAsync(t *testing.T) {
+	blockCh := make(chan struct{})
+	repo := &requestDetailBackupBlockingRepoStub{
+		blockCh: blockCh,
+		items: []RequestDetail{{
+			RequestID: "req-head-fail",
+			CreatedAt: time.Now(),
+		}},
+	}
+	store := newRequestDetailBackupStoreStub()
+	store.headObjectErr = fmt.Errorf("not found")
+	svc := newRequestDetailBackupTestService(repo, store, nil)
+
+	record, err := svc.StartBackup(context.Background(), "manual")
+	require.NoError(t, err)
+	require.Equal(t, "running", record.Status)
+
+	close(blockCh)
+	require.Eventually(t, func() bool {
+		final, err := svc.GetBackupRecord(context.Background(), record.ID)
+		return err == nil && final.Status == "failed" && strings.Contains(final.ErrorMsg, "HeadObject")
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestRequestDetailBackupStartBackupHeadObjectSizeMismatchIsRecordedAsync(t *testing.T) {
+	blockCh := make(chan struct{})
+	repo := &requestDetailBackupBlockingRepoStub{
+		blockCh: blockCh,
+		items: []RequestDetail{{
+			RequestID: "req-head-mismatch",
+			CreatedAt: time.Now(),
+		}},
+	}
+	store := newRequestDetailBackupStoreStub()
+	store.headObjectSizeDelta = 1
+	svc := newRequestDetailBackupTestService(repo, store, nil)
+
+	record, err := svc.StartBackup(context.Background(), "manual")
+	require.NoError(t, err)
+	require.Equal(t, "running", record.Status)
+
+	close(blockCh)
+	require.Eventually(t, func() bool {
+		final, err := svc.GetBackupRecord(context.Background(), record.ID)
+		return err == nil && final.Status == "failed" && strings.Contains(final.ErrorMsg, "size mismatch")
 	}, time.Second, 10*time.Millisecond)
 }

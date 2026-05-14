@@ -205,6 +205,14 @@ func (s *RequestDetailBackupService) executeBackup(record *BackupRecord, store B
 		_ = s.saveRecord(context.Background(), record)
 		return
 	}
+	if sizeBytes <= 0 {
+		record.Status = "failed"
+		record.ErrorMsg = fmt.Sprintf("S3 upload verification failed: object size is %d bytes key=%s content_type=%s", sizeBytes, record.S3Key, "application/gzip")
+		record.Progress = ""
+		record.FinishedAt = time.Now().Format(time.RFC3339)
+		_ = s.saveRecord(context.Background(), record)
+		return
+	}
 
 	record.Status = "completed"
 	record.SizeBytes = sizeBytes

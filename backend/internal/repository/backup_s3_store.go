@@ -72,7 +72,14 @@ func (s *S3BackupStore) Upload(ctx context.Context, key string, body io.Reader, 
 	if err != nil {
 		return 0, fmt.Errorf("S3 PutObject: %w", err)
 	}
-	return int64(len(data)), nil
+	info, err := s.HeadObject(ctx, key)
+	if err != nil {
+		return 0, fmt.Errorf("S3 HeadObject after PutObject: %w", err)
+	}
+	if info.SizeBytes != int64(len(data)) {
+		return 0, fmt.Errorf("S3 HeadObject size mismatch after PutObject: uploaded=%d stored=%d key=%s", len(data), info.SizeBytes, key)
+	}
+	return info.SizeBytes, nil
 }
 
 func (s *S3BackupStore) Download(ctx context.Context, key string) (io.ReadCloser, error) {
@@ -114,4 +121,25 @@ func (s *S3BackupStore) HeadBucket(ctx context.Context) error {
 		return fmt.Errorf("S3 HeadBucket failed: %w", err)
 	}
 	return nil
+}
+
+func (s *S3BackupStore) HeadObject(ctx context.Context, key string) (*service.BackupObjectInfo, error) {
+	result, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: &s.bucket,
+		Key:    &key,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("S3 HeadObject failed: %w", err)
+	}
+	info := &service.BackupObjectInfo{}
+	if result.ContentLength != nil {
+		info.SizeBytes = *result.ContentLength
+	}
+	if result.ETag != nil {
+		info.ETag = *result.ETag
+	}
+	if result.LastModified != nil {
+		info.LastModified = *result.LastModified
+	}
+	return info, nil
 }
