@@ -204,7 +204,7 @@ func (r *requestDetailRepository) StreamAll(ctx context.Context, filters service
 	query := `
 		SELECT ` + selectColumns + `
 		FROM request_details ` + where + `
-		ORDER BY created_at ASC, id ASC
+		ORDER BY COALESCE(completed_at, created_at) ASC, id ASC
 	`
 	rows, err := r.sql.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -540,10 +540,10 @@ func buildRequestDetailWhere(filters service.RequestDetailFilters) (string, []an
 	}
 
 	if filters.StartTime != nil {
-		add("created_at >= $%d", *filters.StartTime)
+		add("COALESCE(completed_at, created_at) >= $%d", *filters.StartTime)
 	}
 	if filters.EndTime != nil {
-		add("created_at < $%d", *filters.EndTime)
+		add("COALESCE(completed_at, created_at) < $%d", *filters.EndTime)
 	}
 	if requestID := strings.TrimSpace(filters.RequestID); requestID != "" {
 		add("request_id = $%d", requestID)
@@ -626,6 +626,10 @@ func normalizeRequestDetailSort(value string) string {
 	switch strings.TrimSpace(strings.ToLower(value)) {
 	case "id":
 		return "id"
+	case "created_at":
+		return "created_at"
+	case "completed_at":
+		return "COALESCE(completed_at, created_at)"
 	case "status_code":
 		return "status_code"
 	case "duration_ms":
@@ -635,7 +639,7 @@ func normalizeRequestDetailSort(value string) string {
 	case "platform":
 		return "platform"
 	default:
-		return "created_at"
+		return "COALESCE(completed_at, created_at)"
 	}
 }
 

@@ -57,6 +57,7 @@ describe('RequestDetailsView', () => {
           id: 1,
           request_id: 'req-1',
           created_at: '2026-05-12T13:00:00Z',
+          completed_at: '2026-05-12T13:00:02Z',
           status_code: 200,
           success: true,
           platform: 'openai',
@@ -126,6 +127,13 @@ describe('RequestDetailsView', () => {
     })
 
     await flushPromises()
+
+    expect(listMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sort_by: 'completed_at',
+        sort_order: 'desc'
+      })
+    )
     await wrapper.get('button.btn-sm').trigger('click')
     await flushPromises()
 

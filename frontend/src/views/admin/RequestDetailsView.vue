@@ -46,7 +46,8 @@
           <table class="w-full min-w-[1100px] text-sm">
             <thead>
               <tr class="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-dark-700 dark:text-gray-400">
-                <th class="py-2 pr-4">请求时间</th>
+                <th class="py-2 pr-4">开始时间</th>
+                <th class="py-2 pr-4">完成时间</th>
                 <th class="py-2 pr-4">Request ID</th>
                 <th class="py-2 pr-4">平台</th>
                 <th class="py-2 pr-4">模型</th>
@@ -62,6 +63,7 @@
             <tbody>
               <tr v-for="row in rows" :key="row.id" class="border-b border-gray-100 align-top dark:border-dark-800">
                 <td class="py-3 pr-4 text-xs">{{ formatDate(row.created_at) }}</td>
+                <td class="py-3 pr-4 text-xs">{{ formatDate(row.completed_at) }}</td>
                 <td class="py-3 pr-4 font-mono text-xs">{{ row.request_id }}</td>
                 <td class="py-3 pr-4 text-xs">{{ row.platform }}</td>
                 <td class="py-3 pr-4 text-xs">{{ row.model }}</td>
@@ -76,7 +78,7 @@
                 </td>
               </tr>
               <tr v-if="!rows.length">
-                <td colspan="11" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">暂无请求详情</td>
+                <td colspan="12" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">暂无请求详情</td>
               </tr>
             </tbody>
           </table>
@@ -319,7 +321,7 @@ const buildQueryParams = (): RequestDetailListParams => ({
   status_code: filters.status_code ? Number(filters.status_code) : undefined,
   success: filters.success === '' ? undefined : filters.success === 'true',
   stream: filters.stream === '' ? undefined : filters.stream === 'true',
-  sort_by: 'created_at',
+  sort_by: 'completed_at',
   sort_order: 'desc'
 })
 

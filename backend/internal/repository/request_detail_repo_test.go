@@ -148,6 +148,36 @@ func TestRequestDetailRepositoryCreateListAndGet(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestRequestDetailRepositoryListUsesCompletedTimeForDefaultSortAndDateFilters(t *testing.T) {
+	ctx := context.Background()
+	db, mock := newSQLMock(t)
+	repo := NewRequestDetailRepository(nil, db)
+
+	start := time.Date(2026, 5, 14, 5, 12, 0, 0, time.UTC)
+	end := start.Add(time.Minute)
+	createdAt := start.Add(-30 * time.Second)
+	completedAt := start.Add(27 * time.Second)
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) FROM request_details WHERE COALESCE(completed_at, created_at) >= $1 AND COALESCE(completed_at, created_at) < $2")).
+		WithArgs(start, end).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
+	mock.ExpectQuery(regexp.QuoteMeta("ORDER BY COALESCE(completed_at, created_at) desc, id DESC")).
+		WithArgs(start, end, 10, 0).
+		WillReturnRows(requestDetailRows().
+			AddRow(int64(32), "req-image", createdAt, completedAt, 38877, 200, true, "openai", "/v1/images/generations", "/v1/images/generations", "gpt-image-2", "gpt-image-2", false, int64(1), int64(1), nil, nil, nil, "127.0.0.1", "ua", "{}", "", "", "{}", "", "", false, "", int64(49), int64(748)))
+
+	items, page, err := repo.List(ctx, pagination.PaginationParams{Page: 1, PageSize: 10, SortOrder: "desc"}, service.RequestDetailFilters{
+		StartTime: &start,
+		EndTime:   &end,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), page.Total)
+	require.Len(t, items, 1)
+	require.Equal(t, "req-image", items[0].RequestID)
+	require.Equal(t, completedAt, *items[0].CompletedAt)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestRequestDetailRepositoryImageArtifacts(t *testing.T) {
 	ctx := context.Background()
 	db, mock := newSQLMock(t)
@@ -244,7 +274,7 @@ func TestRequestDetailRepositoryStreamAllReturnsFullBodies(t *testing.T) {
 	rows := requestDetailRows().
 		AddRow(int64(1), "req-1", createdAt, nil, nil, 200, true, "anthropic", "/v1/messages", "/v1/messages", "claude", "claude", false, nil, nil, nil, nil, nil, "127.0.0.1", "ua", requestDetailMustJSON(t, map[string][]string{"Content-Type": {"application/json"}}), `{"input":"x"}`, `{"upstream":"y"}`, requestDetailMustJSON(t, map[string][]string{"X-Request-ID": {"1"}}), `hello`, `{"output":"z"}`, false, "", int64(13), int64(14))
 
-	mock.ExpectQuery("FROM request_details\\s+ORDER BY created_at ASC, id ASC").
+	mock.ExpectQuery("FROM request_details\\s+ORDER BY COALESCE\\(completed_at, created_at\\) ASC, id ASC").
 		WillReturnRows(rows)
 	mock.ExpectQuery("FROM request_detail_image_artifacts").
 		WithArgs("req-1").
