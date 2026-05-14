@@ -13,6 +13,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -29,12 +30,14 @@ const (
 )
 
 type requestDetailArtifactProcessor struct {
-	requestID          string
-	createdAt          time.Time
-	store              BackupObjectStore
-	cfg                *BackupS3Config
-	nextIndex          int
-	collectedArtifacts []RequestDetailImageArtifact
+	requestID           string
+	createdAt           time.Time
+	store               BackupObjectStore
+	cfg                 *BackupS3Config
+	nextIndex           int
+	collectedArtifacts  []RequestDetailImageArtifact
+	artifactRefsByHash  map[string]requestDetailArtifactRef
+	artifactIndexByHash map[string]int
 }
 
 type requestDetailImagePayload struct {
@@ -123,10 +126,10 @@ func (p *requestDetailArtifactProcessor) sanitizeResponseBody(body string) strin
 }
 
 func (p *requestDetailArtifactProcessor) sanitizeJSONOrSSE(body string, direction string, downloadRemoteURL bool) string {
-	if strings.Contains(body, "data:") || strings.Contains(body, "event:") {
-		return p.sanitizeSSEBody(body, direction, downloadRemoteURL)
-	}
 	if !gjson.Valid(body) {
+		if looksLikeRequestDetailSSE(body) {
+			return p.sanitizeSSEBody(body, direction, downloadRemoteURL)
+		}
 		return body
 	}
 	var value any
@@ -139,6 +142,17 @@ func (p *requestDetailArtifactProcessor) sanitizeJSONOrSSE(body string, directio
 		return body
 	}
 	return string(out)
+}
+
+func looksLikeRequestDetailSSE(body string) bool {
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if line == "" {
+			continue
+		}
+		return strings.HasPrefix(line, "data:") || strings.HasPrefix(line, "event:")
+	}
+	return false
 }
 
 func (p *requestDetailArtifactProcessor) sanitizeSSEBody(body string, direction string, downloadRemoteURL bool) string {
@@ -334,13 +348,17 @@ func (p *requestDetailArtifactProcessor) storeImagePayload(payload requestDetail
 	if p == nil {
 		return requestDetailArtifactRef{Status: requestDetailArtifactStatusFailed, Error: "artifact processor unavailable"}
 	}
-	artifactID := p.nextArtifactID()
 	contentType := strings.TrimSpace(payload.ContentType)
 	if contentType == "" && len(payload.Data) > 0 {
 		contentType = http.DetectContentType(payload.Data)
 	}
 	sum := sha256.Sum256(payload.Data)
 	sha := hex.EncodeToString(sum[:])
+	dedupKey := payload.Direction + ":" + sha
+	if ref, ok := p.findDuplicateArtifact(dedupKey, payload.Source); ok {
+		return ref
+	}
+	artifactID := p.nextArtifactID()
 	artifact := RequestDetailImageArtifact{
 		RequestID:   p.requestID,
 		Direction:   payload.Direction,
@@ -365,7 +383,7 @@ func (p *requestDetailArtifactProcessor) storeImagePayload(payload requestDetail
 		artifact.Status = requestDetailArtifactStatusSkipped
 		artifact.ErrorMessage = "backup S3 storage is not configured"
 		p.appendArtifact(artifact)
-		return requestDetailArtifactRef{
+		ref := requestDetailArtifactRef{
 			ArtifactID:  artifactID,
 			Status:      artifact.Status,
 			ContentType: contentType,
@@ -373,6 +391,8 @@ func (p *requestDetailArtifactProcessor) storeImagePayload(payload requestDetail
 			SHA256:      sha,
 			Error:       artifact.ErrorMessage,
 		}
+		p.rememberArtifact(dedupKey, ref)
+		return ref
 	}
 
 	key := p.buildArtifactKey(artifactID, contentType, payload.FileName)
@@ -382,7 +402,7 @@ func (p *requestDetailArtifactProcessor) storeImagePayload(payload requestDetail
 		artifact.Status = requestDetailArtifactStatusFailed
 		artifact.ErrorMessage = err.Error()
 		p.appendArtifact(artifact)
-		return requestDetailArtifactRef{
+		ref := requestDetailArtifactRef{
 			ArtifactID:  artifactID,
 			Status:      artifact.Status,
 			ContentType: contentType,
@@ -390,10 +410,12 @@ func (p *requestDetailArtifactProcessor) storeImagePayload(payload requestDetail
 			SHA256:      sha,
 			Error:       artifact.ErrorMessage,
 		}
+		p.rememberArtifact(dedupKey, ref)
+		return ref
 	}
 	artifact.S3Key = key
 	p.appendArtifact(artifact)
-	return requestDetailArtifactRef{
+	ref := requestDetailArtifactRef{
 		ArtifactID:  artifactID,
 		Status:      artifact.Status,
 		S3Key:       key,
@@ -401,6 +423,8 @@ func (p *requestDetailArtifactProcessor) storeImagePayload(payload requestDetail
 		SizeBytes:   int64(len(payload.Data)),
 		SHA256:      sha,
 	}
+	p.rememberArtifact(dedupKey, ref)
+	return ref
 }
 
 func (p *requestDetailArtifactProcessor) failedArtifactRef(payload requestDetailImagePayload, err error) requestDetailArtifactRef {
@@ -457,6 +481,80 @@ func (p *requestDetailArtifactProcessor) appendArtifact(artifact RequestDetailIm
 		return
 	}
 	p.collectedArtifacts = append(p.collectedArtifacts, artifact)
+}
+
+func (p *requestDetailArtifactProcessor) findDuplicateArtifact(key string, source string) (requestDetailArtifactRef, bool) {
+	if p == nil || key == ":" || p.artifactRefsByHash == nil {
+		return requestDetailArtifactRef{}, false
+	}
+	ref, ok := p.artifactRefsByHash[key]
+	if !ok {
+		return requestDetailArtifactRef{}, false
+	}
+	if idx, ok := p.artifactIndexByHash[key]; ok && idx >= 0 && idx < len(p.collectedArtifacts) {
+		artifact := p.collectedArtifacts[idx]
+		artifact.Source = mergeRequestDetailArtifactSources(artifact.Source, source)
+		if artifact.Metadata == nil {
+			artifact.Metadata = map[string]any{}
+		}
+		artifact.Metadata["sources"] = splitRequestDetailArtifactSources(artifact.Source)
+		p.collectedArtifacts[idx] = artifact
+	}
+	return ref, true
+}
+
+func (p *requestDetailArtifactProcessor) rememberArtifact(key string, ref requestDetailArtifactRef) {
+	if p == nil || key == ":" {
+		return
+	}
+	if p.artifactRefsByHash == nil {
+		p.artifactRefsByHash = make(map[string]requestDetailArtifactRef)
+	}
+	if p.artifactIndexByHash == nil {
+		p.artifactIndexByHash = make(map[string]int)
+	}
+	p.artifactRefsByHash[key] = ref
+	p.artifactIndexByHash[key] = len(p.collectedArtifacts) - 1
+}
+
+func mergeRequestDetailArtifactSources(values ...string) string {
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		parts = append(parts, splitRequestDetailArtifactSources(value)...)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	seen := make(map[string]struct{}, len(parts))
+	unique := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if _, ok := seen[part]; ok {
+			continue
+		}
+		seen[part] = struct{}{}
+		unique = append(unique, part)
+	}
+	sort.Strings(unique)
+	return strings.Join(unique, ", ")
+}
+
+func splitRequestDetailArtifactSources(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	raw := strings.Split(value, ",")
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func isRequestDetailImageEndpoint(endpoint string) bool {

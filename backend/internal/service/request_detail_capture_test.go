@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func TestRequestDetailCaptureRedactsHeadersAndCapturesResponse(t *testing.T) {
@@ -106,6 +107,30 @@ func TestRequestDetailImageArtifactsSanitizeResponseB64WithoutS3(t *testing.T) {
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal([]byte(detail.ResponseBody), &parsed))
 	require.NotNil(t, parsed)
+}
+
+func TestRequestDetailImageArtifactsDeduplicatesEquivalentResponseFields(t *testing.T) {
+	pngB64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAA=="
+	detail := &RequestDetail{
+		RequestID:    "req-img-dedupe",
+		Endpoint:     "/v1/images/generations",
+		Platform:     PlatformOpenAI,
+		ResponseBody: `{"created":1,"data":[{"b64_json":"` + pngB64 + `","url":"data:image/png;base64,` + pngB64 + `","revised_prompt":"cat"}]}`,
+	}
+
+	svc := NewRequestDetailService(&requestDetailRepoStub{})
+	svc.prepareImageArtifacts(detail)
+
+	require.Len(t, detail.ImageArtifacts, 1)
+	require.Equal(t, "$.data.0.b64_json, $.data.0.url", detail.ImageArtifacts[0].Source)
+	require.Equal(t, []string{"$.data.0.b64_json", "$.data.0.url"}, detail.ImageArtifacts[0].Metadata["sources"])
+
+	b64Ref := gjson.Get(detail.ResponseBody, "data.0.b64_json.artifact_ref").String()
+	urlRef := gjson.Get(detail.ResponseBody, "data.0.url.artifact_ref").String()
+	require.NotEmpty(t, b64Ref)
+	require.Equal(t, b64Ref, urlRef)
+	require.NotContains(t, gjson.Get(detail.ResponseBody, "data.0.b64_json").Raw, pngB64)
+	require.NotContains(t, gjson.Get(detail.ResponseBody, "data.0.url").Raw, pngB64)
 }
 
 func TestRequestDetailImageArtifactsSanitizeMultipartInputWithoutS3(t *testing.T) {
