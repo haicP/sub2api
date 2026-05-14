@@ -300,7 +300,17 @@ func (s *BackupService) TestS3Connection(ctx context.Context, cfg BackupS3Config
 	if err != nil {
 		return err
 	}
-	return store.HeadBucket(ctx)
+	if err := store.HeadBucket(ctx); err != nil {
+		return err
+	}
+	testKey := buildS3ConnectivityTestKey(cfg.Prefix)
+	if _, err := store.Upload(ctx, testKey, strings.NewReader("sub2api s3 connectivity test\n"), "text/plain"); err != nil {
+		return err
+	}
+	if err := store.Delete(ctx, testKey); err != nil {
+		return fmt.Errorf("delete S3 connectivity test object: %w", err)
+	}
+	return nil
 }
 
 func (s *BackupService) NewConfiguredObjectStore(ctx context.Context) (BackupObjectStore, *BackupS3Config, error) {
@@ -1022,6 +1032,14 @@ func (s *BackupService) buildS3Key(cfg *BackupS3Config, fileName string) string 
 		prefix = "backups"
 	}
 	return fmt.Sprintf("%s/%s/%s", prefix, time.Now().Format("2006/01/02"), fileName)
+}
+
+func buildS3ConnectivityTestKey(prefix string) string {
+	prefix = strings.TrimRight(strings.TrimSpace(prefix), "/")
+	if prefix == "" {
+		prefix = "backups"
+	}
+	return fmt.Sprintf("%s/connectivity-tests/%s.txt", prefix, uuid.NewString())
 }
 
 // loadRecords 加载备份记录，区分"无数据"和"数据损坏"

@@ -28,6 +28,8 @@ type RequestDetailBackupService struct {
 	mu          sync.Mutex
 	cronSched   *cron.Cron
 	cronEntryID cron.EntryID
+	backupMu    sync.Mutex
+	backingUp   bool
 }
 
 func NewRequestDetailBackupService(requestDetailService *RequestDetailService, backupService *BackupService, settingRepo SettingRepository) *RequestDetailBackupService {
@@ -109,6 +111,26 @@ func (s *RequestDetailBackupService) UpdateSchedule(ctx context.Context, cfg Bac
 }
 
 func (s *RequestDetailBackupService) StartBackup(ctx context.Context, triggeredBy string) (*BackupRecord, error) {
+	if s == nil || s.requestDetailService == nil || s.backupService == nil {
+		return nil, ErrBackupS3NotConfigured.WithCause(fmt.Errorf("request detail backup service is not initialized"))
+	}
+	s.backupMu.Lock()
+	if s.backingUp {
+		s.backupMu.Unlock()
+		return nil, ErrBackupInProgress
+	}
+	s.backingUp = true
+	s.backupMu.Unlock()
+
+	launched := false
+	defer func() {
+		if !launched {
+			s.backupMu.Lock()
+			s.backingUp = false
+			s.backupMu.Unlock()
+		}
+	}()
+
 	store, cfg, err := s.backupService.NewConfiguredObjectStore(ctx)
 	if err != nil {
 		return nil, err
@@ -128,6 +150,34 @@ func (s *RequestDetailBackupService) StartBackup(ctx context.Context, triggeredB
 		return nil, err
 	}
 
+	launched = true
+	result := *record
+	go s.executeBackup(record, store)
+	return &result, nil
+}
+
+func (s *RequestDetailBackupService) executeBackup(record *BackupRecord, store BackupObjectStore) {
+	defer func() {
+		s.backupMu.Lock()
+		s.backingUp = false
+		s.backupMu.Unlock()
+	}()
+	defer func() {
+		if r := recover(); r != nil {
+			record.Status = "failed"
+			record.ErrorMsg = fmt.Sprintf("internal panic: %v", r)
+			record.Progress = ""
+			record.FinishedAt = time.Now().Format(time.RFC3339)
+			_ = s.saveRecord(context.Background(), record)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	record.Progress = "exporting"
+	_ = s.saveRecord(ctx, record)
+
 	pr, pw := io.Pipe()
 	go func() {
 		gz := gzip.NewWriter(pw)
@@ -142,23 +192,25 @@ func (s *RequestDetailBackupService) StartBackup(ctx context.Context, triggeredB
 		_ = pw.Close()
 	}()
 
+	record.Progress = "uploading"
+	_ = s.saveRecord(ctx, record)
+
 	sizeBytes, err := store.Upload(ctx, record.S3Key, pr, "application/gzip")
 	if err != nil {
+		_ = pr.CloseWithError(err)
 		record.Status = "failed"
 		record.ErrorMsg = err.Error()
+		record.Progress = ""
 		record.FinishedAt = time.Now().Format(time.RFC3339)
 		_ = s.saveRecord(context.Background(), record)
-		return record, err
+		return
 	}
 
 	record.Status = "completed"
 	record.SizeBytes = sizeBytes
+	record.Progress = ""
 	record.FinishedAt = time.Now().Format(time.RFC3339)
-	if err := s.saveRecord(context.Background(), record); err != nil {
-		return nil, err
-	}
-	result := *record
-	return &result, nil
+	_ = s.saveRecord(context.Background(), record)
 }
 
 func (s *RequestDetailBackupService) ListBackups(ctx context.Context) ([]BackupRecord, error) {

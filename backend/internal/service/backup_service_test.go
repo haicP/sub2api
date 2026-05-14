@@ -159,8 +159,13 @@ func (d *blockingDumper) Restore(_ context.Context, data io.Reader) error {
 }
 
 type mockObjectStore struct {
-	objects map[string][]byte
-	mu      sync.Mutex
+	objects     map[string][]byte
+	mu          sync.Mutex
+	uploadCount int
+	deleteCount int
+	uploadErr   error
+	deleteErr   error
+	headErr     error
 }
 
 func newMockObjectStore() *mockObjectStore {
@@ -173,6 +178,12 @@ func (m *mockObjectStore) Upload(_ context.Context, key string, body io.Reader, 
 		return 0, err
 	}
 	m.mu.Lock()
+	m.uploadCount++
+	if m.uploadErr != nil {
+		err := m.uploadErr
+		m.mu.Unlock()
+		return 0, err
+	}
 	m.objects[key] = data
 	m.mu.Unlock()
 	return int64(len(data)), nil
@@ -190,6 +201,12 @@ func (m *mockObjectStore) Download(_ context.Context, key string) (io.ReadCloser
 
 func (m *mockObjectStore) Delete(_ context.Context, key string) error {
 	m.mu.Lock()
+	m.deleteCount++
+	if m.deleteErr != nil {
+		err := m.deleteErr
+		m.mu.Unlock()
+		return err
+	}
 	delete(m.objects, key)
 	m.mu.Unlock()
 	return nil
@@ -200,7 +217,9 @@ func (m *mockObjectStore) PresignURL(_ context.Context, key string, _ time.Durat
 }
 
 func (m *mockObjectStore) HeadBucket(_ context.Context) error {
-	return nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.headErr
 }
 
 func newTestBackupService(repo *mockSettingRepo, dumper DBDumper, store *mockObjectStore) *BackupService {
@@ -508,6 +527,30 @@ func TestBackupService_TestS3Connection(t *testing.T) {
 		SecretAccessKey: "sk",
 	})
 	require.NoError(t, err)
+	store.mu.Lock()
+	require.Equal(t, 1, store.uploadCount)
+	require.Equal(t, 1, store.deleteCount)
+	require.Empty(t, store.objects)
+	store.mu.Unlock()
+}
+
+func TestBackupService_TestS3Connection_PutObjectFailure(t *testing.T) {
+	repo := newMockSettingRepo()
+	store := newMockObjectStore()
+	store.uploadErr = fmt.Errorf("S3 PutObject failed")
+	svc := newTestBackupService(repo, &mockDumper{}, store)
+
+	err := svc.TestS3Connection(context.Background(), BackupS3Config{
+		Bucket:          "test",
+		AccessKeyID:     "ak",
+		SecretAccessKey: "sk",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "S3 PutObject failed")
+	store.mu.Lock()
+	require.Equal(t, 1, store.uploadCount)
+	require.Equal(t, 0, store.deleteCount)
+	store.mu.Unlock()
 }
 
 func TestBackupService_TestS3Connection_Incomplete(t *testing.T) {
