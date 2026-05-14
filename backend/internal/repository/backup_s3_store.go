@@ -3,8 +3,12 @@ package repository
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -12,6 +16,8 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
@@ -74,12 +80,23 @@ func (s *S3BackupStore) Upload(ctx context.Context, key string, body io.Reader, 
 	}
 	info, err := s.HeadObject(ctx, key)
 	if err != nil {
-		return 0, fmt.Errorf("S3 HeadObject after PutObject: %w", err)
+		headErr := err
+		if !isS3Forbidden(headErr) {
+			return 0, fmt.Errorf("S3 HeadObject after PutObject: %w", headErr)
+		}
+		info, err = s.confirmObjectWithList(ctx, key)
+		if err != nil {
+			listErr := err
+			info, err = s.confirmObjectWithRangeGet(ctx, key)
+			if err != nil {
+				return 0, fmt.Errorf("S3 HeadObject forbidden and object confirmation failed after PutObject: head=%v list=%v get=%w", headErr, listErr, err)
+			}
+		}
 	}
-	if info.SizeBytes != int64(len(data)) {
+	if info.SizeBytes > 0 && info.SizeBytes != int64(len(data)) {
 		return 0, fmt.Errorf("S3 HeadObject size mismatch after PutObject: uploaded=%d stored=%d key=%s", len(data), info.SizeBytes, key)
 	}
-	return info.SizeBytes, nil
+	return int64(len(data)), nil
 }
 
 func (s *S3BackupStore) Download(ctx context.Context, key string) (io.ReadCloser, error) {
@@ -142,4 +159,87 @@ func (s *S3BackupStore) HeadObject(ctx context.Context, key string) (*service.Ba
 		info.LastModified = *result.LastModified
 	}
 	return info, nil
+}
+
+func (s *S3BackupStore) confirmObjectWithRangeGet(ctx context.Context, key string) (*service.BackupObjectInfo, error) {
+	byteRange := "bytes=0-0"
+	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: &s.bucket,
+		Key:    &key,
+		Range:  &byteRange,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("S3 GetObject range confirmation failed: %w", err)
+	}
+	defer func() { _ = result.Body.Close() }()
+	if _, err := io.Copy(io.Discard, result.Body); err != nil {
+		return nil, fmt.Errorf("read S3 GetObject range confirmation: %w", err)
+	}
+	info := &service.BackupObjectInfo{}
+	if result.ContentRange != nil {
+		if sizeBytes, ok := parseS3ContentRangeSize(*result.ContentRange); ok {
+			info.SizeBytes = sizeBytes
+		}
+	}
+	if result.ETag != nil {
+		info.ETag = *result.ETag
+	}
+	if result.LastModified != nil {
+		info.LastModified = *result.LastModified
+	}
+	return info, nil
+}
+
+func (s *S3BackupStore) confirmObjectWithList(ctx context.Context, key string) (*service.BackupObjectInfo, error) {
+	maxKeys := int32(1)
+	result, err := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket:  &s.bucket,
+		Prefix:  &key,
+		MaxKeys: &maxKeys,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("S3 ListObjectsV2 confirmation failed: %w", err)
+	}
+	for _, object := range result.Contents {
+		if object.Key == nil || *object.Key != key {
+			continue
+		}
+		info := &service.BackupObjectInfo{}
+		if object.Size != nil {
+			info.SizeBytes = *object.Size
+		}
+		if object.ETag != nil {
+			info.ETag = *object.ETag
+		}
+		if object.LastModified != nil {
+			info.LastModified = *object.LastModified
+		}
+		return info, nil
+	}
+	return nil, fmt.Errorf("S3 ListObjectsV2 confirmation did not find key: %s", key)
+}
+
+func isS3Forbidden(err error) bool {
+	var responseErr *smithyhttp.ResponseError
+	if errors.As(err, &responseErr) && responseErr.HTTPStatusCode() == http.StatusForbidden {
+		return true
+	}
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		code := strings.ToLower(strings.TrimSpace(apiErr.ErrorCode()))
+		return code == "forbidden" || code == "accessdenied" || code == "accessdeniedexception"
+	}
+	return false
+}
+
+func parseS3ContentRangeSize(value string) (int64, bool) {
+	_, suffix, ok := strings.Cut(strings.TrimSpace(value), "/")
+	if !ok || suffix == "" || suffix == "*" {
+		return 0, false
+	}
+	sizeBytes, err := strconv.ParseInt(suffix, 10, 64)
+	if err != nil || sizeBytes < 0 {
+		return 0, false
+	}
+	return sizeBytes, true
 }
