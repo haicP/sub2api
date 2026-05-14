@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
@@ -303,12 +304,26 @@ func (s *BackupService) TestS3Connection(ctx context.Context, cfg BackupS3Config
 	if err := store.HeadBucket(ctx); err != nil {
 		return err
 	}
-	testKey := buildS3ConnectivityTestKey(cfg.Prefix)
-	if _, err := store.Upload(ctx, testKey, strings.NewReader("sub2api s3 connectivity test\n"), "text/plain"); err != nil {
+	testObjects, err := buildS3ConnectivityTestObjects(cfg.Prefix)
+	if err != nil {
 		return err
 	}
-	if err := store.Delete(ctx, testKey); err != nil {
-		return fmt.Errorf("delete S3 connectivity test object: %w", err)
+	uploadedKeys := make([]string, 0, len(testObjects))
+	for _, testObject := range testObjects {
+		if _, err := store.Upload(ctx, testObject.Key, bytes.NewReader(testObject.Body), testObject.ContentType); err != nil {
+			for _, key := range uploadedKeys {
+				if deleteErr := store.Delete(ctx, key); deleteErr != nil {
+					logger.LegacyPrintf("service.backup", "[Backup] 清理 S3 连通性测试对象失败 key=%s err=%v", key, deleteErr)
+				}
+			}
+			return fmt.Errorf("upload S3 connectivity test object %s: %w", testObject.Key, err)
+		}
+		uploadedKeys = append(uploadedKeys, testObject.Key)
+	}
+	for _, key := range uploadedKeys {
+		if err := store.Delete(ctx, key); err != nil {
+			return fmt.Errorf("delete S3 connectivity test object %s: %w", key, err)
+		}
 	}
 	return nil
 }
@@ -1034,12 +1049,51 @@ func (s *BackupService) buildS3Key(cfg *BackupS3Config, fileName string) string 
 	return fmt.Sprintf("%s/%s/%s", prefix, time.Now().Format("2006/01/02"), fileName)
 }
 
-func buildS3ConnectivityTestKey(prefix string) string {
+type s3ConnectivityTestObject struct {
+	Key         string
+	Body        []byte
+	ContentType string
+}
+
+func buildS3ConnectivityTestObjects(prefix string) ([]s3ConnectivityTestObject, error) {
 	prefix = strings.TrimRight(strings.TrimSpace(prefix), "/")
 	if prefix == "" {
 		prefix = "backups"
 	}
-	return fmt.Sprintf("%s/connectivity-tests/%s.txt", prefix, uuid.NewString())
+
+	id := uuid.NewString()
+	var gzBuf bytes.Buffer
+	gz := gzip.NewWriter(&gzBuf)
+	if _, err := gz.Write([]byte(`{"type":"request_detail_connectivity_test"}` + "\n")); err != nil {
+		return nil, fmt.Errorf("build request detail connectivity gzip: %w", err)
+	}
+	if err := gz.Close(); err != nil {
+		return nil, fmt.Errorf("close request detail connectivity gzip: %w", err)
+	}
+
+	return []s3ConnectivityTestObject{
+		{
+			Key:         fmt.Sprintf("%s/connectivity-tests/%s.txt", prefix, id),
+			Body:        []byte("sub2api s3 connectivity test\n"),
+			ContentType: "text/plain",
+		},
+		{
+			Key:         fmt.Sprintf("%s/request-details/connectivity-tests/%s.ndjson.gz", prefix, id),
+			Body:        gzBuf.Bytes(),
+			ContentType: "application/gzip",
+		},
+		{
+			Key: fmt.Sprintf("%s/request-detail-images/connectivity-tests/%s.png", prefix, id),
+			Body: []byte{
+				0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+				0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+				0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+				0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+				0x89,
+			},
+			ContentType: "image/png",
+		},
+	}, nil
 }
 
 // loadRecords 加载备份记录，区分"无数据"和"数据损坏"

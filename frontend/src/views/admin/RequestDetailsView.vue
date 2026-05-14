@@ -121,23 +121,25 @@
                 <th class="py-2 pr-4">大小</th>
                 <th class="py-2 pr-4">触发方式</th>
                 <th class="py-2 pr-4">开始时间</th>
+                <th class="py-2 pr-4">错误信息</th>
                 <th class="py-2">操作</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="backup in backups" :key="backup.id" class="border-b border-gray-100 dark:border-dark-800">
                 <td class="py-3 pr-4 font-mono text-xs">{{ backup.id }}</td>
-                <td class="py-3 pr-4 text-xs">{{ backup.status }}</td>
+                <td class="py-3 pr-4 text-xs">{{ formatBackupStatus(backup) }}</td>
                 <td class="py-3 pr-4 text-xs">{{ backup.file_name }}</td>
                 <td class="py-3 pr-4 text-xs">{{ formatBytes(backup.size_bytes) }}</td>
                 <td class="py-3 pr-4 text-xs">{{ backup.triggered_by }}</td>
                 <td class="py-3 pr-4 text-xs">{{ formatDate(backup.started_at) }}</td>
+                <td class="max-w-[320px] truncate py-3 pr-4 text-xs text-red-600 dark:text-red-400" :title="backup.error_message || ''">{{ backup.error_message || '-' }}</td>
                 <td class="py-3">
-                  <button class="btn btn-secondary btn-sm" @click="downloadBackup(backup.id)">下载</button>
+                  <button class="btn btn-secondary btn-sm" :disabled="backup.status !== 'completed'" @click="downloadBackup(backup.id)">下载</button>
                 </td>
               </tr>
               <tr v-if="!backups.length">
-                <td colspan="7" class="py-4 text-center text-sm text-gray-500 dark:text-gray-400">暂无备份记录</td>
+                <td colspan="8" class="py-4 text-center text-sm text-gray-500 dark:text-gray-400">暂无备份记录</td>
               </tr>
             </tbody>
           </table>
@@ -464,6 +466,7 @@ const handlePageSizeChange = (value: number) => {
 const formatDate = (value?: string) => value ? new Date(value).toLocaleString() : '-'
 const formatBytes = (value?: number) => typeof value === 'number' ? `${value} B` : '-'
 const formatJSON = (value: unknown) => value ? JSON.stringify(value, null, 2) : ''
+const formatBackupStatus = (backup: RequestDetailBackupRecord) => backup.progress ? `${backup.status} / ${backup.progress}` : backup.status
 
 onMounted(async () => {
   await Promise.all([loadData(), loadBackups()])

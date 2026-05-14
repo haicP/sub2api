@@ -89,6 +89,7 @@ export interface RequestDetailBackupRecord {
   error_message?: string
   started_at: string
   finished_at?: string
+  progress?: string
 }
 
 export interface RequestDetailBackupSchedule {

@@ -528,8 +528,8 @@ func TestBackupService_TestS3Connection(t *testing.T) {
 	})
 	require.NoError(t, err)
 	store.mu.Lock()
-	require.Equal(t, 1, store.uploadCount)
-	require.Equal(t, 1, store.deleteCount)
+	require.Equal(t, 3, store.uploadCount)
+	require.Equal(t, 3, store.deleteCount)
 	require.Empty(t, store.objects)
 	store.mu.Unlock()
 }
