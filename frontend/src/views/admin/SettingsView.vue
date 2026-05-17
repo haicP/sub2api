@@ -6045,7 +6045,7 @@
 
         <!-- Tab: Backup -->
         <div v-show="activeTab === 'backup'">
-          <BackupSettings />
+          <BackupSettings v-if="backupTabVisited" />
         </div>
 
         <!-- Save Button -->
@@ -6230,6 +6230,12 @@ const settingsTabKeyboardActions = {
 
 function selectSettingsTab(tab: SettingsTab): void {
   activeTab.value = tab;
+  if (tab === "payment") {
+    void ensureProvidersLoaded();
+  }
+  if (tab === "backup") {
+    backupTabVisited.value = true;
+  }
 }
 
 function focusSettingsTab(tab: SettingsTab): void {
@@ -6274,6 +6280,7 @@ const { copyToClipboard } = useClipboard();
 const loading = ref(true);
 const loadFailed = ref(false);
 const saving = ref(false);
+const backupTabVisited = ref(false);
 const testingSmtp = ref(false);
 const sendingTestEmail = ref(false);
 const smtpPasswordManuallyEdited = ref(false);
@@ -8328,6 +8335,7 @@ function slog(...args: unknown[]) {
 }
 
 const providersLoading = ref(false);
+const providersLoaded = ref(false);
 const providerSaving = ref(false);
 const providers = ref<ProviderInstance[]>([]);
 const showProviderDialog = ref(false);
@@ -8476,11 +8484,19 @@ async function loadProviders() {
   try {
     const res = await adminAPI.payment.getProviders();
     providers.value = res.data || [];
+    providersLoaded.value = true;
   } catch (err: unknown) {
     appStore.showError(extractI18nErrorMessage(err, t, "payment.errors", t("common.error")));
   } finally {
     providersLoading.value = false;
   }
+}
+
+async function ensureProvidersLoaded() {
+  if (providersLoaded.value || providersLoading.value) {
+    return;
+  }
+  await loadProviders();
 }
 
 function openCreateProvider() {
@@ -8637,7 +8653,6 @@ onMounted(() => {
   loadStreamTimeoutSettings();
   loadRectifierSettings();
   loadBetaPolicySettings();
-  loadProviders();
 });
 
 // =========================
