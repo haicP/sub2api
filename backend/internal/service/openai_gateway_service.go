@@ -3595,10 +3595,16 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		}
 	}
 
+	currentSSEEventType := ""
 	for scanner.Scan() {
 		line := scanner.Text()
 		lineStartsClientOutput := false
 		forceFlushFailedEvent := false
+		if line == "" {
+			currentSSEEventType = ""
+		} else if eventType, ok := extractOpenAISSEEventLine(line); ok {
+			currentSSEEventType = eventType
+		}
 		if data, ok := extractOpenAISSEDataLine(line); ok {
 			dataBytes := []byte(data)
 			trimmedData := strings.TrimSpace(data)
@@ -3610,6 +3616,14 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				}
 			}
 			eventType := strings.TrimSpace(gjson.Get(trimmedData, "type").String())
+			if eventType == "" {
+				eventType = currentSSEEventType
+				if patchedData := openAICompatPayloadWithEventType(trimmedData, eventType); patchedData != trimmedData {
+					line = "data: " + patchedData
+					dataBytes = []byte(patchedData)
+					trimmedData = strings.TrimSpace(patchedData)
+				}
+			}
 			if eventType == "response.failed" {
 				failedMessage = extractOpenAISSEErrorMessage(dataBytes)
 				if !openAIStreamClientOutputStarted(c, clientOutputStarted) && openAIStreamFailedEventShouldFailover(dataBytes, failedMessage) {
@@ -4434,9 +4448,15 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 		sendErrorEvent("stream_read_error")
 		return resultWithUsage(), fmt.Errorf("stream read error: %w", scanErr), true
 	}
+	currentSSEEventType := ""
 	processSSELine := func(line string, queueDrained bool) {
 		if streamFailoverErr != nil {
 			return
+		}
+		if line == "" {
+			currentSSEEventType = ""
+		} else if eventType, ok := extractOpenAISSEEventLine(line); ok {
+			currentSSEEventType = eventType
 		}
 		// Extract data from SSE line (supports both "data: " and "data:" formats)
 		if data, ok := extractOpenAISSEDataLine(line); ok {
@@ -4445,13 +4465,24 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			// Fast path: most events do not contain model field values.
 			if needModelReplace && mappedModel != "" && strings.Contains(data, mappedModel) {
 				line = s.replaceModelInSSELine(line, mappedModel, originalModel)
+				if replacedData, replaced := extractOpenAISSEDataLine(line); replaced {
+					data = replacedData
+				}
 			}
 
 			dataBytes := []byte(data)
+			eventType := strings.TrimSpace(gjson.GetBytes(dataBytes, "type").String())
+			if eventType == "" {
+				eventType = currentSSEEventType
+				if patchedData := openAICompatPayloadWithEventType(data, eventType); patchedData != data {
+					data = patchedData
+					dataBytes = []byte(patchedData)
+					line = "data: " + patchedData
+				}
+			}
 			if openAIStreamEventIsTerminal(data) {
 				sawTerminalEvent = true
 			}
-			eventType := strings.TrimSpace(gjson.GetBytes(dataBytes, "type").String())
 			forceFlushFailedEvent := false
 			if eventType == "response.failed" {
 				failedMessage = extractOpenAISSEErrorMessage(dataBytes)
