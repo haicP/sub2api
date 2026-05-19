@@ -41,6 +41,7 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/sub2api:self
             ghcr.io/${{ steps.meta.outputs.owner }}/sub2api:codex-request-details
             ghcr.io/${{ steps.meta.outputs.owner }}/sub2api:codex-request-details-${{ steps.meta.outputs.short_sha }}
           labels: |
