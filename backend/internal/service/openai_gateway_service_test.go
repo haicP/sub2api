@@ -1483,6 +1483,7 @@ func TestOpenAIStreamingPassthroughEventLineTerminalWithoutPayloadTypeSucceeds(t
 	require.Equal(t, 3, result.usage.OutputTokens)
 	require.Equal(t, 1, result.usage.CacheReadInputTokens)
 	require.Contains(t, rec.Body.String(), `"type":"response.completed"`)
+	require.True(t, strings.HasSuffix(rec.Body.String(), "\n\n"), "terminal SSE frame must be closed")
 }
 
 func TestOpenAIStreamingPassthroughResponseIncompleteWithoutDoneMarkerStillSucceeds(t *testing.T) {
@@ -1644,6 +1645,7 @@ func TestOpenAIStreamingEventLineTerminalWithoutPayloadTypeSucceeds(t *testing.T
 	require.Equal(t, 6, result.usage.OutputTokens)
 	require.Equal(t, 2, result.usage.CacheReadInputTokens)
 	require.Contains(t, rec.Body.String(), `"type":"response.completed"`)
+	require.True(t, strings.HasSuffix(rec.Body.String(), "\n\n"), "terminal SSE frame must be closed")
 }
 
 func TestOpenAIStreamingPassthroughTerminalEventWithoutUpstreamCloseReturns(t *testing.T) {

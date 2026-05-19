@@ -3667,6 +3667,14 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			}
 		}
 		if sawTerminalEvent {
+			if !clientDisconnected {
+				if _, err := fmt.Fprintln(w); err != nil {
+					clientDisconnected = true
+					logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Client disconnected during terminal frame flush, returning collected usage")
+				} else {
+					flusher.Flush()
+				}
+			}
 			return resultWithUsage(), nil
 		}
 	}
@@ -4518,6 +4526,17 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 				} else if _, err := bufferedWriter.WriteString("\n"); err != nil {
 					clientDisconnected = true
 					logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming, continuing to drain upstream for billing")
+				} else if sawTerminalEvent {
+					if _, err := bufferedWriter.WriteString("\n"); err != nil {
+						clientDisconnected = true
+						logger.LegacyPrintf("service.openai_gateway", "Client disconnected during terminal frame flush, continuing to drain upstream for billing")
+					} else if err := flushBuffered(); err != nil {
+						clientDisconnected = true
+						logger.LegacyPrintf("service.openai_gateway", "Client disconnected during terminal frame flush, continuing to drain upstream for billing")
+					} else {
+						clientOutputStarted = true
+						lastDownstreamWriteAt = time.Now()
+					}
 				} else if shouldFlush {
 					if err := flushBuffered(); err != nil {
 						clientDisconnected = true
