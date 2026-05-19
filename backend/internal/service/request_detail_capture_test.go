@@ -135,14 +135,14 @@ func TestRequestDetailImageArtifactsDeduplicatesEquivalentResponseFields(t *test
 
 func TestRequestDetailImageArtifactsSanitizeMultipartInputWithoutS3(t *testing.T) {
 	var body strings.Builder
-	body.WriteString("--boundary\r\n")
-	body.WriteString("Content-Disposition: form-data; name=\"prompt\"\r\n\r\n")
-	body.WriteString("edit it\r\n")
-	body.WriteString("--boundary\r\n")
-	body.WriteString("Content-Disposition: form-data; name=\"image\"; filename=\"input.png\"\r\n")
-	body.WriteString("Content-Type: image/png\r\n\r\n")
-	body.WriteString("\x89PNG\r\n\x1a\nimage-bytes\r\n")
-	body.WriteString("--boundary--\r\n")
+	_, _ = body.WriteString("--boundary\r\n")
+	_, _ = body.WriteString("Content-Disposition: form-data; name=\"prompt\"\r\n\r\n")
+	_, _ = body.WriteString("edit it\r\n")
+	_, _ = body.WriteString("--boundary\r\n")
+	_, _ = body.WriteString("Content-Disposition: form-data; name=\"image\"; filename=\"input.png\"\r\n")
+	_, _ = body.WriteString("Content-Type: image/png\r\n\r\n")
+	_, _ = body.WriteString("\x89PNG\r\n\x1a\nimage-bytes\r\n")
+	_, _ = body.WriteString("--boundary--\r\n")
 
 	detail := &RequestDetail{
 		RequestID: "req-img-2",
