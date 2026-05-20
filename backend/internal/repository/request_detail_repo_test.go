@@ -178,6 +178,25 @@ func TestRequestDetailRepositoryListUsesCompletedTimeForDefaultSortAndDateFilter
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestRequestDetailRepositoryListFiltersByAPIKeyAndUserText(t *testing.T) {
+	ctx := context.Background()
+	db, mock := newSQLMock(t)
+	repo := NewRequestDetailRepository(nil, db)
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) FROM request_details WHERE user_id IN (SELECT id FROM users WHERE deleted_at IS NULL AND (email ILIKE '%' || $1 || '%' OR username ILIKE '%' || $1 || '%')) AND api_key_id IN (SELECT id FROM api_keys WHERE deleted_at IS NULL AND (key ILIKE '%' || $2 || '%' OR name ILIKE '%' || $2 || '%'))")).
+		WithArgs("admin@example.com", "prod-key").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+	items, page, err := repo.List(ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, service.RequestDetailFilters{
+		User:   "admin@example.com",
+		APIKey: "prod-key",
+	})
+	require.NoError(t, err)
+	require.Empty(t, items)
+	require.Equal(t, int64(0), page.Total)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestRequestDetailRepositoryImageArtifacts(t *testing.T) {
 	ctx := context.Background()
 	db, mock := newSQLMock(t)

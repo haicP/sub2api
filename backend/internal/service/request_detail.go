@@ -74,7 +74,9 @@ type RequestDetailFilters struct {
 	EndTime   *time.Time
 
 	RequestID string
+	User      string
 	UserID    *int64
+	APIKey    string
 	APIKeyID  *int64
 	AccountID *int64
 	GroupID   *int64

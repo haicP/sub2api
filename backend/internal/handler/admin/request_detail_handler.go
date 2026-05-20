@@ -233,6 +233,8 @@ func (h *RequestDetailHandler) UpdateBackupSchedule(c *gin.Context) {
 func parseRequestDetailFilters(c *gin.Context) (service.RequestDetailFilters, bool) {
 	filters := service.RequestDetailFilters{
 		RequestID: strings.TrimSpace(c.Query("request_id")),
+		User:      strings.TrimSpace(c.Query("user")),
+		APIKey:    strings.TrimSpace(c.Query("api_key")),
 		Platform:  strings.TrimSpace(c.Query("platform")),
 		Model:     strings.TrimSpace(c.Query("model")),
 		Endpoint:  strings.TrimSpace(c.Query("endpoint")),

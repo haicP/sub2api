@@ -3,21 +3,24 @@
     <div class="space-y-6">
       <section class="card p-4">
         <div class="grid gap-3 md:grid-cols-4">
-          <input v-model="filters.request_id" class="input" placeholder="Request ID" />
-          <input v-model="filters.user_id" class="input" placeholder="用户 ID" />
-          <input v-model="filters.api_key_id" class="input" placeholder="API Key ID" />
-          <input v-model="filters.account_id" class="input" placeholder="账号 ID" />
-          <input v-model="filters.group_id" class="input" placeholder="分组 ID" />
+          <input v-model="filters.api_key" class="input" placeholder="API Key" />
+          <input v-model="filters.user" class="input" placeholder="用户" />
           <input v-model="filters.model" class="input" placeholder="模型" />
-          <input v-model="filters.endpoint" class="input" placeholder="Endpoint" />
-          <input v-model="filters.status_code" class="input" placeholder="状态码" />
           <select v-model="filters.platform" class="input">
-            <option value="">全部平台</option>
+            <option value="">全部平台类型</option>
             <option value="anthropic">Anthropic</option>
             <option value="openai">OpenAI</option>
             <option value="gemini">Gemini</option>
             <option value="antigravity">Antigravity</option>
           </select>
+        </div>
+        <div v-if="advancedFiltersOpen" class="mt-3 grid gap-3 md:grid-cols-4">
+          <input v-model="filters.request_id" class="input" placeholder="Request ID" />
+          <input v-model="filters.user_id" class="input" placeholder="用户 ID" />
+          <input v-model="filters.account_id" class="input" placeholder="账号 ID" />
+          <input v-model="filters.group_id" class="input" placeholder="分组 ID" />
+          <input v-model="filters.endpoint" class="input" placeholder="Endpoint" />
+          <input v-model="filters.status_code" class="input" placeholder="状态码" />
           <select v-model="filters.success" class="input">
             <option value="">全部状态</option>
             <option value="true">成功</option>
@@ -33,6 +36,9 @@
           <div class="flex flex-wrap gap-2">
             <button class="btn btn-primary" @click="loadData">查询</button>
             <button class="btn btn-secondary" @click="resetFilters">重置</button>
+            <button class="btn btn-secondary" :aria-expanded="advancedFiltersOpen" @click="advancedFiltersOpen = !advancedFiltersOpen">
+              {{ advancedFiltersOpen ? '收起筛选' : '更多筛选' }}
+            </button>
           </div>
           <div class="flex flex-wrap gap-2 sm:justify-end">
             <button class="btn btn-secondary" :disabled="loading" @click="handleExport">导出 Excel</button>
@@ -72,7 +78,7 @@
                 <td class="py-3 pr-4 text-xs">{{ row.stream ? '是' : '否' }}</td>
                 <td class="py-3 pr-4 text-xs">{{ row.user_id ?? '-' }}</td>
                 <td class="py-3 pr-4 text-xs">{{ row.api_key_id ?? '-' }}</td>
-                <td class="py-3 pr-4 text-xs">{{ formatBytes(row.request_body_bytes) }} / {{ formatBytes(row.response_body_bytes) }}</td>
+                <td class="py-3 pr-4 text-xs">{{ formatSize(row.request_body_bytes) }} / {{ formatSize(row.response_body_bytes) }}</td>
                 <td class="py-3">
                   <button class="btn btn-secondary btn-sm" @click="openDetail(row.id)">查看</button>
                 </td>
@@ -130,7 +136,7 @@
                 <td class="py-3 pr-4 font-mono text-xs">{{ backup.id }}</td>
                 <td class="py-3 pr-4 text-xs">{{ formatBackupStatus(backup) }}</td>
                 <td class="py-3 pr-4 text-xs">{{ backup.file_name }}</td>
-                <td class="py-3 pr-4 text-xs">{{ formatBytes(backup.size_bytes) }}</td>
+                <td class="py-3 pr-4 text-xs">{{ formatSize(backup.size_bytes) }}</td>
                 <td class="py-3 pr-4 text-xs">{{ backup.triggered_by }}</td>
                 <td class="py-3 pr-4 text-xs">{{ formatDate(backup.started_at) }}</td>
                 <td class="max-w-[320px] truncate py-3 pr-4 text-xs text-red-600 dark:text-red-400" :title="backup.error_message || ''">{{ backup.error_message || '-' }}</td>
@@ -235,7 +241,7 @@
                   <td class="px-3 py-2">{{ artifact.source }}</td>
                   <td class="px-3 py-2">{{ artifact.status }}</td>
                   <td class="px-3 py-2">{{ artifact.content_type || '-' }}</td>
-                  <td class="px-3 py-2">{{ formatBytes(artifact.size_bytes) }}</td>
+                  <td class="px-3 py-2">{{ formatSize(artifact.size_bytes) }}</td>
                   <td class="max-w-[260px] truncate px-3 py-2 font-mono" :title="artifact.s3_key || artifact.error_message">{{ artifact.s3_key || artifact.error_message || '-' }}</td>
                   <td class="px-3 py-2">
                     <button class="btn btn-secondary btn-sm" :disabled="artifact.status !== 'stored'" @click="openArtifact(artifact.id)">预览</button>
@@ -288,6 +294,7 @@ const pageSize = ref(20)
 const selectedDetail = ref<RequestDetail | null>(null)
 const detailDialogOpen = ref(false)
 const detailLoading = ref(false)
+const advancedFiltersOpen = ref(false)
 const backups = ref<RequestDetailBackupRecord[]>([])
 const schedule = reactive<RequestDetailBackupSchedule>({
   enabled: false,
@@ -296,9 +303,10 @@ const schedule = reactive<RequestDetailBackupSchedule>({
   retain_count: 0
 })
 const filters = reactive({
+  api_key: '',
+  user: '',
   request_id: '',
   user_id: '',
-  api_key_id: '',
   account_id: '',
   group_id: '',
   platform: '',
@@ -309,23 +317,27 @@ const filters = reactive({
   stream: ''
 })
 
-const buildQueryParams = (): RequestDetailListParams => ({
-  page: page.value,
-  page_size: pageSize.value,
-  request_id: filters.request_id || undefined,
-  user_id: filters.user_id ? Number(filters.user_id) : undefined,
-  api_key_id: filters.api_key_id ? Number(filters.api_key_id) : undefined,
-  account_id: filters.account_id ? Number(filters.account_id) : undefined,
-  group_id: filters.group_id ? Number(filters.group_id) : undefined,
-  platform: filters.platform || undefined,
-  model: filters.model || undefined,
-  endpoint: filters.endpoint || undefined,
-  status_code: filters.status_code ? Number(filters.status_code) : undefined,
-  success: filters.success === '' ? undefined : filters.success === 'true',
-  stream: filters.stream === '' ? undefined : filters.stream === 'true',
-  sort_by: 'completed_at',
-  sort_order: 'desc'
-})
+const buildQueryParams = (): RequestDetailListParams => {
+  const params: RequestDetailListParams = {
+    page: page.value,
+    page_size: pageSize.value,
+    api_key: filters.api_key || undefined,
+    user: filters.user || undefined,
+    request_id: filters.request_id || undefined,
+    user_id: filters.user_id ? Number(filters.user_id) : undefined,
+    account_id: filters.account_id ? Number(filters.account_id) : undefined,
+    group_id: filters.group_id ? Number(filters.group_id) : undefined,
+    platform: filters.platform || undefined,
+    model: filters.model || undefined,
+    endpoint: filters.endpoint || undefined,
+    status_code: filters.status_code ? Number(filters.status_code) : undefined,
+    success: filters.success === '' ? undefined : filters.success === 'true',
+    stream: filters.stream === '' ? undefined : filters.stream === 'true',
+    sort_by: 'completed_at',
+    sort_order: 'desc'
+  }
+  return Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined)) as RequestDetailListParams
+}
 
 const loadData = async () => {
   loading.value = true
@@ -357,9 +369,10 @@ const loadBackups = async () => {
 }
 
 const resetFilters = () => {
+  filters.api_key = ''
+  filters.user = ''
   filters.request_id = ''
   filters.user_id = ''
-  filters.api_key_id = ''
   filters.account_id = ''
   filters.group_id = ''
   filters.platform = ''
@@ -464,7 +477,12 @@ const handlePageSizeChange = (value: number) => {
 }
 
 const formatDate = (value?: string) => value ? new Date(value).toLocaleString() : '-'
-const formatBytes = (value?: number) => typeof value === 'number' ? `${value} B` : '-'
+const formatSize = (value?: number) => {
+  if (typeof value !== 'number') return '-'
+  if (value <= 1024) return `${value} B`
+  if (value <= 1024 * 1024) return `${(value / 1024).toFixed(2)} KB`
+  return `${(value / 1024 / 1024).toFixed(2)} M`
+}
 const formatJSON = (value: unknown) => value ? JSON.stringify(value, null, 2) : ''
 const formatBackupStatus = (backup: RequestDetailBackupRecord) => backup.progress ? `${backup.status} / ${backup.progress}` : backup.status
 

@@ -532,11 +532,15 @@ func scanRequestDetail(scanner requestDetailScanner) (*service.RequestDetail, er
 }
 
 func buildRequestDetailWhere(filters service.RequestDetailFilters) (string, []any) {
-	conditions := make([]string, 0, 12)
-	args := make([]any, 0, 12)
+	conditions := make([]string, 0, 14)
+	args := make([]any, 0, 14)
 	add := func(format string, value any) {
 		args = append(args, value)
 		conditions = append(conditions, fmt.Sprintf(format, len(args)))
+	}
+	addRepeated := func(format string, value any) {
+		args = append(args, value)
+		conditions = append(conditions, fmt.Sprintf(format, len(args), len(args)))
 	}
 
 	if filters.StartTime != nil {
@@ -551,8 +555,14 @@ func buildRequestDetailWhere(filters service.RequestDetailFilters) (string, []an
 	if filters.UserID != nil {
 		add("user_id = $%d", *filters.UserID)
 	}
+	if user := strings.TrimSpace(filters.User); user != "" {
+		addRepeated("user_id IN (SELECT id FROM users WHERE deleted_at IS NULL AND (email ILIKE '%%' || $%d || '%%' OR username ILIKE '%%' || $%d || '%%'))", user)
+	}
 	if filters.APIKeyID != nil {
 		add("api_key_id = $%d", *filters.APIKeyID)
+	}
+	if apiKey := strings.TrimSpace(filters.APIKey); apiKey != "" {
+		addRepeated("api_key_id IN (SELECT id FROM api_keys WHERE deleted_at IS NULL AND (key ILIKE '%%' || $%d || '%%' OR name ILIKE '%%' || $%d || '%%'))", apiKey)
 	}
 	if filters.AccountID != nil {
 		add("account_id = $%d", *filters.AccountID)

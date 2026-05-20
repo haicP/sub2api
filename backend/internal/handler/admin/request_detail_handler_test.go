@@ -59,13 +59,15 @@ func TestRequestDetailHandlerListParsesFilters(t *testing.T) {
 	r := gin.New()
 	r.GET("/admin/request-details", h.List)
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/request-details?platform=openai&model=gpt-test&success=true&stream=false", nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/request-details?platform=openai&model=gpt-test&api_key=prod-key&user=admin%40example.com&success=true&stream=false", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "openai", repo.listFilters.Platform)
 	require.Equal(t, "gpt-test", repo.listFilters.Model)
+	require.Equal(t, "prod-key", repo.listFilters.APIKey)
+	require.Equal(t, "admin@example.com", repo.listFilters.User)
 	require.NotNil(t, repo.listFilters.Success)
 	require.True(t, *repo.listFilters.Success)
 	require.NotNil(t, repo.listFilters.Stream)

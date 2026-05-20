@@ -8,7 +8,9 @@ export interface RequestDetailListParams {
   end_date?: string
   timezone?: string
   request_id?: string
+  user?: string
   user_id?: number
+  api_key?: string
   api_key_id?: number
   account_id?: number
   group_id?: number
