@@ -204,16 +204,22 @@
         <div>
           <div class="mb-2 flex items-center justify-between">
             <h3 class="text-sm font-medium text-gray-900 dark:text-white">入站请求体</h3>
-            <button class="btn btn-secondary btn-sm" @click="copyText(selectedDetail.request_body || '')">复制</button>
+            <button class="btn btn-secondary btn-sm" :disabled="!selectedDetail.request_body" @click="copyText(selectedDetail.request_body)">复制</button>
           </div>
-          <pre class="max-h-96 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ selectedDetail.request_body }}</pre>
+          <pre class="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ detailPreviews.requestBody.text }}</pre>
+          <p v-if="detailPreviews.requestBody.truncated" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            仅预览前 {{ formatSize(TEXT_PREVIEW_LIMIT) }}，完整 {{ formatSize(selectedDetail.request_body_bytes) }}
+          </p>
         </div>
         <div>
           <div class="mb-2 flex items-center justify-between">
             <h3 class="text-sm font-medium text-gray-900 dark:text-white">上游请求体</h3>
-            <button class="btn btn-secondary btn-sm" @click="copyText(selectedDetail.upstream_request_body || '')">复制</button>
+            <button class="btn btn-secondary btn-sm" :disabled="!selectedDetail.upstream_request_body" @click="copyText(selectedDetail.upstream_request_body)">复制</button>
           </div>
-          <pre class="max-h-96 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ selectedDetail.upstream_request_body }}</pre>
+          <pre class="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ detailPreviews.upstreamRequestBody.text }}</pre>
+          <p v-if="detailPreviews.upstreamRequestBody.truncated" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            仅预览前 {{ formatSize(TEXT_PREVIEW_LIMIT) }}
+          </p>
         </div>
         <div class="lg:col-span-2">
           <div class="mb-2 flex items-center justify-between">
@@ -255,16 +261,22 @@
         <div class="lg:col-span-2">
           <div class="mb-2 flex items-center justify-between">
             <h3 class="text-sm font-medium text-gray-900 dark:text-white">响应内容</h3>
-            <button class="btn btn-secondary btn-sm" @click="copyText(selectedDetail.response_content || '')">复制</button>
+            <button class="btn btn-secondary btn-sm" :disabled="!selectedDetail.response_content" @click="copyText(selectedDetail.response_content)">复制</button>
           </div>
-          <pre class="max-h-96 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ selectedDetail.response_content || '-' }}</pre>
+          <pre class="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ detailPreviews.responseContent.text }}</pre>
+          <p v-if="detailPreviews.responseContent.truncated" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            仅预览前 {{ formatSize(TEXT_PREVIEW_LIMIT) }}
+          </p>
         </div>
         <div class="lg:col-span-2">
           <div class="mb-2 flex items-center justify-between">
             <h3 class="text-sm font-medium text-gray-900 dark:text-white">响应体</h3>
-            <button class="btn btn-secondary btn-sm" @click="copyText(selectedDetail.response_body || '')">复制</button>
+            <button class="btn btn-secondary btn-sm" :disabled="!selectedDetail.response_body" @click="copyText(selectedDetail.response_body)">复制</button>
           </div>
-          <pre class="max-h-96 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ selectedDetail.response_body }}</pre>
+          <pre class="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded bg-gray-50 p-3 text-xs dark:bg-dark-800">{{ detailPreviews.responseBody.text }}</pre>
+          <p v-if="detailPreviews.responseBody.truncated" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            仅预览前 {{ formatSize(TEXT_PREVIEW_LIMIT) }}，完整 {{ formatSize(selectedDetail.response_body_bytes) }}
+          </p>
         </div>
       </div>
     </div>
@@ -276,15 +288,19 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { saveAs } from 'file-saver'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import { requestDetailsAPI, type RequestDetail, type RequestDetailBackupRecord, type RequestDetailBackupSchedule, type RequestDetailListParams, type RequestDetailSummary } from '@/api/admin/requestDetails'
+import { useClipboard } from '@/composables/useClipboard'
 import { useAppStore } from '@/stores'
 
+const TEXT_PREVIEW_LIMIT = 64 * 1024
+
 const appStore = useAppStore()
+const { copyToClipboard } = useClipboard()
 const loading = ref(false)
 const backupRunning = ref(false)
 const rows = ref<RequestDetailSummary[]>([])
@@ -316,6 +332,31 @@ const filters = reactive({
   success: '',
   stream: ''
 })
+
+interface TextPreview {
+  text: string
+  truncated: boolean
+}
+
+const buildTextPreview = (value?: string): TextPreview => {
+  if (!value) {
+    return { text: '-', truncated: false }
+  }
+  if (value.length <= TEXT_PREVIEW_LIMIT) {
+    return { text: value, truncated: false }
+  }
+  return {
+    text: `${value.slice(0, TEXT_PREVIEW_LIMIT)}\n\n...`,
+    truncated: true
+  }
+}
+
+const detailPreviews = computed(() => ({
+  requestBody: buildTextPreview(selectedDetail.value?.request_body),
+  upstreamRequestBody: buildTextPreview(selectedDetail.value?.upstream_request_body),
+  responseContent: buildTextPreview(selectedDetail.value?.response_content),
+  responseBody: buildTextPreview(selectedDetail.value?.response_body)
+}))
 
 const buildQueryParams = (): RequestDetailListParams => {
   const params: RequestDetailListParams = {
@@ -456,13 +497,12 @@ const openArtifact = async (artifactId: number) => {
   }
 }
 
-const copyText = async (value: string) => {
-  try {
-    await navigator.clipboard.writeText(value)
-    appStore.showSuccess('已复制')
-  } catch {
-    appStore.showError('复制失败')
+const copyText = async (value?: string) => {
+  if (!value) {
+    appStore.showError('无内容可复制')
+    return
   }
+  await copyToClipboard(value, '已复制')
 }
 
 const handlePageChange = (value: number) => {

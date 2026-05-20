@@ -3,7 +3,7 @@ import { defineComponent } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import RequestDetailsView from '../RequestDetailsView.vue'
 
-const { requestDetailsAPIMock, listMock, listBackupsMock, getBackupScheduleMock, getMock, getArtifactDownloadURLMock } = vi.hoisted(() => {
+const { requestDetailsAPIMock, listMock, listBackupsMock, getBackupScheduleMock, getMock, getArtifactDownloadURLMock, copyToClipboardMock } = vi.hoisted(() => {
   const requestDetailsAPIMock = {
     list: vi.fn(),
     listBackups: vi.fn(),
@@ -18,7 +18,8 @@ const { requestDetailsAPIMock, listMock, listBackupsMock, getBackupScheduleMock,
     listBackupsMock: requestDetailsAPIMock.listBackups,
     getBackupScheduleMock: requestDetailsAPIMock.getBackupSchedule,
     getMock: requestDetailsAPIMock.get,
-    getArtifactDownloadURLMock: requestDetailsAPIMock.getArtifactDownloadURL
+    getArtifactDownloadURLMock: requestDetailsAPIMock.getArtifactDownloadURL,
+    copyToClipboardMock: vi.fn()
   }
 })
 
@@ -31,6 +32,12 @@ vi.mock('@/stores', () => ({
   useAppStore: () => ({
     showSuccess: vi.fn(),
     showError: vi.fn()
+  })
+}))
+
+vi.mock('@/composables/useClipboard', () => ({
+  useClipboard: () => ({
+    copyToClipboard: copyToClipboardMock
   })
 }))
 
@@ -324,5 +331,74 @@ describe('RequestDetailsView', () => {
 
     expect(wrapper.text()).toContain('1024.00 KB / 2.00 M')
     expect(wrapper.text()).toContain('3.00 M')
+  })
+
+  it('大正文只渲染预览但复制完整内容', async () => {
+    const largeBody = `{"payload":"${'x'.repeat(70 * 1024)}"}`
+    listMock.mockResolvedValueOnce({
+      items: [{
+        id: 1,
+        request_id: 'req-large',
+        created_at: '2026-05-12T13:00:00Z',
+        status_code: 200,
+        success: true,
+        platform: 'openai',
+        endpoint: '/v1/responses',
+        upstream_endpoint: '/v1/responses',
+        model: 'gpt-5.5',
+        upstream_model: 'gpt-5.5',
+        stream: true,
+        request_body_bytes: largeBody.length,
+        response_body_bytes: 2
+      }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1
+    })
+    listBackupsMock.mockResolvedValueOnce({ items: [] })
+    getBackupScheduleMock.mockResolvedValueOnce({ enabled: false, cron_expr: '0 2 * * *', retain_days: 0, retain_count: 0 })
+    getMock.mockResolvedValueOnce({
+      id: 1,
+      request_id: 'req-large',
+      created_at: '2026-05-12T13:00:00Z',
+      status_code: 200,
+      success: true,
+      platform: 'openai',
+      endpoint: '/v1/responses',
+      upstream_endpoint: '/v1/responses',
+      model: 'gpt-5.5',
+      upstream_model: 'gpt-5.5',
+      stream: true,
+      request_body_bytes: largeBody.length,
+      response_body_bytes: 2,
+      response_truncated: false,
+      request_body: largeBody,
+      response_body: '{}'
+    })
+    copyToClipboardMock.mockResolvedValueOnce(true)
+
+    const wrapper = mount(RequestDetailsView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          Pagination: true,
+          BaseDialog: BaseDialogStub
+        }
+      }
+    })
+
+    await flushPromises()
+    await wrapper.get('button.btn-sm').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('仅预览前 64.00 KB')
+    expect(wrapper.text()).not.toContain('x'.repeat(70 * 1024))
+
+    const copyButtons = wrapper.findAll('button').filter((button) => button.text() === '复制')
+    await copyButtons[2].trigger('click')
+    await flushPromises()
+
+    expect(copyToClipboardMock).toHaveBeenCalledWith(largeBody, '已复制')
   })
 })

@@ -220,6 +220,13 @@ func TestExtractResponseContent(t *testing.T) {
 		require.Equal(t, "Hello world", got)
 	})
 
+	t.Run("openai responses function call sse", func(t *testing.T) {
+		body := "event: response.output_item.done\n" +
+			"data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_1\",\"type\":\"function_call\",\"status\":\"completed\",\"name\":\"write_stdin\",\"arguments\":\"{\\\"session_id\\\":21762,\\\"chars\\\":\\\"\\\"}\"},\"output_index\":0}\n\n"
+		got := extractResponseContent(RequestDetailContext{Platform: PlatformOpenAI}, body)
+		require.Equal(t, "function_call: write_stdin\narguments: {\n  \"session_id\": 21762,\n  \"chars\": \"\"\n}", got)
+	})
+
 	t.Run("anthropic sse", func(t *testing.T) {
 		body := "event: content_block_start\n" +
 			"data: {\"type\":\"content_block_start\",\"content_block\":{\"type\":\"text\",\"text\":\"Hello\"}}\n\n" +

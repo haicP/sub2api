@@ -289,6 +289,9 @@ func extractOpenAIResponseContent(body string) string {
 		if outputJSON, ok := reconstructResponseOutputFromSSE(body); ok {
 			return extractTextFromOpenAIOutputJSON(outputJSON)
 		}
+		if text := extractOpenAIFunctionCallsFromSSE(body); text != "" {
+			return text
+		}
 	}
 
 	trimmed := strings.TrimSpace(body)
@@ -323,6 +326,30 @@ func extractChatCompletionsContentFromSSE(body string) string {
 		})
 	})
 	return strings.Join(texts, "")
+}
+
+func extractOpenAIFunctionCallsFromSSE(body string) string {
+	var texts []string
+	forEachOpenAISSEDataPayload(body, func(data []byte) {
+		if len(data) == 0 || !gjson.ValidBytes(data) {
+			return
+		}
+		if gjson.GetBytes(data, "type").String() != "response.output_item.done" {
+			return
+		}
+		item := gjson.GetBytes(data, "item")
+		if !item.Exists() || !item.IsObject() || item.Get("type").String() != "function_call" {
+			return
+		}
+		var raw map[string]any
+		if err := json.Unmarshal([]byte(item.Raw), &raw); err != nil {
+			return
+		}
+		if text := extractTextFromOpenAIFunctionCall(raw); text != "" {
+			texts = append(texts, text)
+		}
+	})
+	return strings.Join(texts, "\n\n")
 }
 
 func extractAnthropicResponseContent(body string) string {
@@ -405,6 +432,9 @@ func extractTextFromOpenAIOutputJSON(outputJSON []byte) string {
 	}
 	var texts []string
 	for _, item := range output {
+		if text := extractTextFromOpenAIFunctionCall(item); text != "" {
+			texts = append(texts, text)
+		}
 		content, ok := item["content"]
 		if !ok {
 			continue
@@ -414,6 +444,35 @@ func extractTextFromOpenAIOutputJSON(outputJSON []byte) string {
 		}
 	}
 	return strings.Join(texts, "")
+}
+
+func extractTextFromOpenAIFunctionCall(item map[string]any) string {
+	if item == nil {
+		return ""
+	}
+	itemType, _ := item["type"].(string)
+	if itemType != "function_call" {
+		return ""
+	}
+
+	name, _ := item["name"].(string)
+	arguments, _ := item["arguments"].(string)
+	if strings.TrimSpace(name) == "" && strings.TrimSpace(arguments) == "" {
+		return ""
+	}
+	if strings.TrimSpace(arguments) != "" && json.Valid([]byte(arguments)) {
+		var out bytes.Buffer
+		if err := json.Indent(&out, []byte(arguments), "", "  "); err == nil {
+			arguments = out.String()
+		}
+	}
+	if strings.TrimSpace(name) == "" {
+		return strings.TrimSpace(arguments)
+	}
+	if strings.TrimSpace(arguments) == "" {
+		return "function_call: " + strings.TrimSpace(name)
+	}
+	return "function_call: " + strings.TrimSpace(name) + "\narguments: " + strings.TrimSpace(arguments)
 }
 
 func extractTextFromChatChoicesJSON(choicesJSON []byte) string {
