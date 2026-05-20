@@ -4525,8 +4525,6 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	// Pre-filter: strip empty text blocks (including nested in tool_result) to prevent upstream 400.
 	body = StripEmptyTextBlocks(body)
 
-	// 重试间复用同一请求体，避免每次 string(body) 产生额外分配。
-	setOpsUpstreamRequestBody(c, body)
 	if cap, ok := GetRequestDetailCapture(c); ok {
 		cap.SetUpstreamRequestBody(body)
 		cap.SetContext(RequestDetailContext{
@@ -5025,8 +5023,6 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 	// Pre-filter: strip empty text blocks (including nested in tool_result) to prevent upstream 400.
 	input.Body = StripEmptyTextBlocks(input.Body)
 
-	// 重试间复用同一请求体，避免每次 string(body) 产生额外分配。
-	setOpsUpstreamRequestBody(c, input.Body)
 	if cap, ok := GetRequestDetailCapture(c); ok {
 		cap.SetUpstreamRequestBody(input.Body)
 		cap.SetContext(RequestDetailContext{
@@ -6218,7 +6214,6 @@ func (s *GatewayService) buildUpstreamRequestAnthropicVertex(
 	if err != nil {
 		return nil, err
 	}
-	setOpsUpstreamRequestBody(c, vertexBody)
 	fullURL, err := buildVertexAnthropicURL(account.VertexProjectID(), account.VertexLocation(modelID), modelID, reqStream)
 	if err != nil {
 		return nil, err

@@ -185,7 +185,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 	}
 
 	setRequestDetailRequestBody(c, body)
-	setOpsRequestContext(c, modelName, stream, body)
+	setOpsRequestContext(c, modelName, stream)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(stream, false)))
 	setRequestDetailContext(c, service.RequestDetailContext{
 		Platform:  service.PlatformGemini,
