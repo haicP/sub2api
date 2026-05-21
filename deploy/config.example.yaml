@@ -711,6 +711,21 @@ usage_cleanup:
   task_timeout_seconds: 1800
 
 # =============================================================================
+# Request Detail Retention Configuration
+# 请求详情记录保留配置（重启生效）
+# =============================================================================
+request_detail:
+  # Request detail retention days, 0 disables automatic cleanup
+  # 请求详情记录保留天数，0 表示关闭自动清理
+  retention_days: 7
+  # Cleanup interval (seconds)
+  # 自动清理间隔（秒）
+  cleanup_interval_seconds: 86400
+  # Batch delete size
+  # 单批删除数量
+  cleanup_batch_size: 5000
+
+# =============================================================================
 # HTTP 写接口幂等配置
 # Idempotency Configuration
 # =============================================================================

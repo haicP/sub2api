@@ -18,10 +18,15 @@ import (
 
 type requestDetailBackupRepoStub struct {
 	RequestDetailRepository
-	items []RequestDetail
+	mu      sync.Mutex
+	items   []RequestDetail
+	filters []RequestDetailFilters
 }
 
-func (s *requestDetailBackupRepoStub) StreamAll(_ context.Context, _ RequestDetailFilters, write func(RequestDetail) error) error {
+func (s *requestDetailBackupRepoStub) StreamAll(_ context.Context, filters RequestDetailFilters, write func(RequestDetail) error) error {
+	s.mu.Lock()
+	s.filters = append(s.filters, filters)
+	s.mu.Unlock()
 	for _, item := range s.items {
 		if err := write(item); err != nil {
 			return err
@@ -134,11 +139,16 @@ func TestRequestDetailBackupWritesGzipNDJSON(t *testing.T) {
 
 type requestDetailBackupBlockingRepoStub struct {
 	RequestDetailRepository
+	mu      sync.Mutex
 	blockCh chan struct{}
 	items   []RequestDetail
+	filters []RequestDetailFilters
 }
 
-func (s *requestDetailBackupBlockingRepoStub) StreamAll(ctx context.Context, _ RequestDetailFilters, write func(RequestDetail) error) error {
+func (s *requestDetailBackupBlockingRepoStub) StreamAll(ctx context.Context, filters RequestDetailFilters, write func(RequestDetail) error) error {
+	s.mu.Lock()
+	s.filters = append(s.filters, filters)
+	s.mu.Unlock()
 	select {
 	case <-s.blockCh:
 	case <-ctx.Done():
@@ -268,6 +278,51 @@ func TestRequestDetailBackupStartBackupReturnsRunningAndCompletesAsync(t *testin
 		final, err := svc.GetBackupRecord(context.Background(), record.ID)
 		return err == nil && final.Status == "completed" && final.SizeBytes > 0
 	}, time.Second, 10*time.Millisecond)
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	require.Len(t, repo.filters, 1)
+	require.Nil(t, repo.filters[0].StartTime)
+	require.Nil(t, repo.filters[0].EndTime)
+}
+
+func TestRequestDetailBackupScheduledBackupUsesPreviousDayFilter(t *testing.T) {
+	loc := time.Local
+	fixedNow := time.Date(2026, 5, 21, 10, 30, 0, 0, loc)
+	originalNow := requestDetailBackupNow
+	requestDetailBackupNow = func() time.Time { return fixedNow }
+	t.Cleanup(func() { requestDetailBackupNow = originalNow })
+
+	blockCh := make(chan struct{})
+	repo := &requestDetailBackupBlockingRepoStub{
+		blockCh: blockCh,
+		items: []RequestDetail{{
+			RequestID: "req-scheduled",
+			CreatedAt: fixedNow,
+		}},
+	}
+	store := newRequestDetailBackupStoreStub()
+	svc := newRequestDetailBackupTestService(repo, store, nil)
+
+	record, err := svc.StartScheduledBackup(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "scheduled", record.TriggeredBy)
+
+	close(blockCh)
+	require.Eventually(t, func() bool {
+		final, err := svc.GetBackupRecord(context.Background(), record.ID)
+		return err == nil && final.Status == "completed"
+	}, time.Second, 10*time.Millisecond)
+
+	expectedEnd := time.Date(2026, 5, 21, 0, 0, 0, 0, loc)
+	expectedStart := expectedEnd.AddDate(0, 0, -1)
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	require.Len(t, repo.filters, 1)
+	require.NotNil(t, repo.filters[0].StartTime)
+	require.NotNil(t, repo.filters[0].EndTime)
+	require.Equal(t, expectedStart, *repo.filters[0].StartTime)
+	require.Equal(t, expectedEnd, *repo.filters[0].EndTime)
 }
 
 func TestRequestDetailBackupStartBackupUploadFailureIsRecordedAsync(t *testing.T) {

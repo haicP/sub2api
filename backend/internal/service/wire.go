@@ -392,8 +392,16 @@ func ProvideBackupService(
 	return svc
 }
 
-func ProvideRequestDetailService(repo RequestDetailRepository) *RequestDetailService {
-	svc := NewRequestDetailService(repo)
+func ProvideRequestDetailService(repo RequestDetailRepository, cfg *config.Config) *RequestDetailService {
+	retention := RequestDetailRetentionConfig{}
+	if cfg != nil {
+		retention.RetentionDays = cfg.RequestDetail.RetentionDays
+		if cfg.RequestDetail.CleanupIntervalSeconds > 0 {
+			retention.CleanupInterval = time.Duration(cfg.RequestDetail.CleanupIntervalSeconds) * time.Second
+		}
+		retention.CleanupBatchSize = cfg.RequestDetail.CleanupBatchSize
+	}
+	svc := NewRequestDetailService(repo, retention)
 	svc.Start()
 	return svc
 }

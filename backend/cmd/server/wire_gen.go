@@ -216,7 +216,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	usageCleanupService := service.ProvideUsageCleanupService(usageCleanupRepository, timingWheelService, dashboardAggregationService, configConfig)
 	adminUsageHandler := admin.NewUsageHandler(usageService, apiKeyService, adminService, usageCleanupService)
 	requestDetailRepository := repository.NewRequestDetailRepository(client, db)
-	requestDetailService := service.ProvideRequestDetailService(requestDetailRepository)
+	requestDetailService := service.ProvideRequestDetailService(requestDetailRepository, configConfig)
 	requestDetailService.SetBackupService(backupService)
 	requestDetailBackupService := service.ProvideRequestDetailBackupService(requestDetailService, backupService, settingRepository)
 	requestDetailHandler := admin.NewRequestDetailHandler(requestDetailService, requestDetailBackupService)

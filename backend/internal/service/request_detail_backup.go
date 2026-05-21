@@ -13,12 +13,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 )
 
 const (
 	settingKeyRequestDetailBackupSchedule = "request_detail_backup_schedule"
 	settingKeyRequestDetailBackupRecords  = "request_detail_backup_records"
 )
+
+var requestDetailBackupNow = time.Now
 
 type RequestDetailBackupService struct {
 	requestDetailService *RequestDetailService
@@ -111,6 +115,14 @@ func (s *RequestDetailBackupService) UpdateSchedule(ctx context.Context, cfg Bac
 }
 
 func (s *RequestDetailBackupService) StartBackup(ctx context.Context, triggeredBy string) (*BackupRecord, error) {
+	return s.startBackup(ctx, triggeredBy, RequestDetailFilters{})
+}
+
+func (s *RequestDetailBackupService) StartScheduledBackup(ctx context.Context) (*BackupRecord, error) {
+	return s.startBackup(ctx, "scheduled", previousDayRequestDetailFilters(requestDetailBackupNow()))
+}
+
+func (s *RequestDetailBackupService) startBackup(ctx context.Context, triggeredBy string, filters RequestDetailFilters) (*BackupRecord, error) {
 	if s == nil || s.requestDetailService == nil || s.backupService == nil {
 		return nil, ErrBackupS3NotConfigured.WithCause(fmt.Errorf("request detail backup service is not initialized"))
 	}
@@ -136,7 +148,7 @@ func (s *RequestDetailBackupService) StartBackup(ctx context.Context, triggeredB
 		return nil, err
 	}
 
-	now := time.Now()
+	now := requestDetailBackupNow()
 	record := &BackupRecord{
 		ID:          uuid.New().String()[:8],
 		Status:      "running",
@@ -152,11 +164,11 @@ func (s *RequestDetailBackupService) StartBackup(ctx context.Context, triggeredB
 
 	launched = true
 	result := *record
-	go s.executeBackup(record, store)
+	go s.executeBackup(record, store, filters)
 	return &result, nil
 }
 
-func (s *RequestDetailBackupService) executeBackup(record *BackupRecord, store BackupObjectStore) {
+func (s *RequestDetailBackupService) executeBackup(record *BackupRecord, store BackupObjectStore, filters RequestDetailFilters) {
 	defer func() {
 		s.backupMu.Lock()
 		s.backingUp = false
@@ -181,7 +193,7 @@ func (s *RequestDetailBackupService) executeBackup(record *BackupRecord, store B
 	pr, pw := io.Pipe()
 	go func() {
 		gz := gzip.NewWriter(pw)
-		writeErr := s.requestDetailService.WriteBackupNDJSON(ctx, RequestDetailFilters{}, gz)
+		writeErr := s.requestDetailService.WriteBackupNDJSON(ctx, filters, gz)
 		if closeErr := gz.Close(); writeErr == nil {
 			writeErr = closeErr
 		}
@@ -272,7 +284,7 @@ func (s *RequestDetailBackupService) applyCronScheduleLocked(cfg *BackupSchedule
 	entryID, err := s.cronSched.AddFunc(cfg.CronExpr, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
-		_, _ = s.StartBackup(ctx, "scheduled")
+		_, _ = s.StartScheduledBackup(ctx)
 	})
 	if err != nil {
 		return err
@@ -325,4 +337,13 @@ func buildRequestDetailBackupKey(cfg *BackupS3Config, fileName string) string {
 		prefix = "backups"
 	}
 	return fmt.Sprintf("%s/request-details/%s", prefix, fileName)
+}
+
+func previousDayRequestDetailFilters(now time.Time) RequestDetailFilters {
+	end := timezone.StartOfDay(now)
+	start := end.AddDate(0, 0, -1)
+	return RequestDetailFilters{
+		StartTime: &start,
+		EndTime:   &end,
+	}
 }

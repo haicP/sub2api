@@ -85,6 +85,7 @@ type Config struct {
 	Dashboard               DashboardCacheConfig          `mapstructure:"dashboard_cache"`
 	DashboardAgg            DashboardAggregationConfig    `mapstructure:"dashboard_aggregation"`
 	UsageCleanup            UsageCleanupConfig            `mapstructure:"usage_cleanup"`
+	RequestDetail           RequestDetailConfig           `mapstructure:"request_detail"`
 	Concurrency             ConcurrencyConfig             `mapstructure:"concurrency"`
 	TokenRefresh            TokenRefreshConfig            `mapstructure:"token_refresh"`
 	RunMode                 string                        `mapstructure:"run_mode" yaml:"run_mode"`
@@ -171,6 +172,16 @@ type IdempotencyConfig struct {
 	// CleanupIntervalSeconds 过期记录清理周期（秒）。
 	CleanupIntervalSeconds int `mapstructure:"cleanup_interval_seconds"`
 	// CleanupBatchSize 每次清理的最大记录数。
+	CleanupBatchSize int `mapstructure:"cleanup_batch_size"`
+}
+
+type RequestDetailConfig struct {
+	// RetentionDays controls how many days request detail rows are retained.
+	// 0 disables automatic cleanup.
+	RetentionDays int `mapstructure:"retention_days"`
+	// CleanupIntervalSeconds controls how often expired request details are pruned.
+	CleanupIntervalSeconds int `mapstructure:"cleanup_interval_seconds"`
+	// CleanupBatchSize limits rows deleted in one batch.
 	CleanupBatchSize int `mapstructure:"cleanup_batch_size"`
 }
 
@@ -1703,6 +1714,11 @@ func setDefaults() {
 	viper.SetDefault("usage_cleanup.worker_interval_seconds", 10)
 	viper.SetDefault("usage_cleanup.task_timeout_seconds", 1800)
 
+	// Request detail retention
+	viper.SetDefault("request_detail.retention_days", 7)
+	viper.SetDefault("request_detail.cleanup_interval_seconds", 86400)
+	viper.SetDefault("request_detail.cleanup_batch_size", 5000)
+
 	// Idempotency
 	viper.SetDefault("idempotency.observe_only", true)
 	viper.SetDefault("idempotency.default_ttl_seconds", 86400)
@@ -2304,6 +2320,24 @@ func (c *Config) Validate() error {
 		}
 		if c.UsageCleanup.TaskTimeoutSeconds < 0 {
 			return fmt.Errorf("usage_cleanup.task_timeout_seconds must be non-negative")
+		}
+	}
+	if c.RequestDetail.RetentionDays < 0 {
+		return fmt.Errorf("request_detail.retention_days must be non-negative")
+	}
+	if c.RequestDetail.RetentionDays > 0 {
+		if c.RequestDetail.CleanupIntervalSeconds <= 0 {
+			return fmt.Errorf("request_detail.cleanup_interval_seconds must be positive")
+		}
+		if c.RequestDetail.CleanupBatchSize <= 0 {
+			return fmt.Errorf("request_detail.cleanup_batch_size must be positive")
+		}
+	} else {
+		if c.RequestDetail.CleanupIntervalSeconds < 0 {
+			return fmt.Errorf("request_detail.cleanup_interval_seconds must be non-negative")
+		}
+		if c.RequestDetail.CleanupBatchSize < 0 {
+			return fmt.Errorf("request_detail.cleanup_batch_size must be non-negative")
 		}
 	}
 	if c.Idempotency.DefaultTTLSeconds <= 0 {

@@ -666,6 +666,47 @@ func TestLoadDefaultUsageCleanupConfig(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultRequestDetailConfig(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.RequestDetail.RetentionDays != 7 {
+		t.Fatalf("RequestDetail.RetentionDays = %d, want 7", cfg.RequestDetail.RetentionDays)
+	}
+	if cfg.RequestDetail.CleanupIntervalSeconds != 86400 {
+		t.Fatalf("RequestDetail.CleanupIntervalSeconds = %d, want 86400", cfg.RequestDetail.CleanupIntervalSeconds)
+	}
+	if cfg.RequestDetail.CleanupBatchSize != 5000 {
+		t.Fatalf("RequestDetail.CleanupBatchSize = %d, want 5000", cfg.RequestDetail.CleanupBatchSize)
+	}
+}
+
+func TestLoadRequestDetailConfigFromEnv(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("REQUEST_DETAIL_RETENTION_DAYS", "14")
+	t.Setenv("REQUEST_DETAIL_CLEANUP_INTERVAL_SECONDS", "3600")
+	t.Setenv("REQUEST_DETAIL_CLEANUP_BATCH_SIZE", "200")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.RequestDetail.RetentionDays != 14 {
+		t.Fatalf("RequestDetail.RetentionDays = %d, want 14", cfg.RequestDetail.RetentionDays)
+	}
+	if cfg.RequestDetail.CleanupIntervalSeconds != 3600 {
+		t.Fatalf("RequestDetail.CleanupIntervalSeconds = %d, want 3600", cfg.RequestDetail.CleanupIntervalSeconds)
+	}
+	if cfg.RequestDetail.CleanupBatchSize != 200 {
+		t.Fatalf("RequestDetail.CleanupBatchSize = %d, want 200", cfg.RequestDetail.CleanupBatchSize)
+	}
+}
+
 func TestValidateUsageCleanupConfigEnabled(t *testing.T) {
 	resetViperWithJWTSecret(t)
 
@@ -701,6 +742,44 @@ func TestValidateUsageCleanupConfigDisabled(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "usage_cleanup.batch_size") {
 		t.Fatalf("Validate() expected batch_size error, got: %v", err)
+	}
+}
+
+func TestValidateRequestDetailConfig(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	cfg.RequestDetail.RetentionDays = -1
+	err = cfg.Validate()
+	if err == nil {
+		t.Fatalf("Validate() expected error for request_detail.retention_days, got nil")
+	}
+	if !strings.Contains(err.Error(), "request_detail.retention_days") {
+		t.Fatalf("Validate() expected retention_days error, got: %v", err)
+	}
+
+	cfg.RequestDetail.RetentionDays = 7
+	cfg.RequestDetail.CleanupIntervalSeconds = 0
+	err = cfg.Validate()
+	if err == nil {
+		t.Fatalf("Validate() expected error for request_detail.cleanup_interval_seconds, got nil")
+	}
+	if !strings.Contains(err.Error(), "request_detail.cleanup_interval_seconds") {
+		t.Fatalf("Validate() expected cleanup_interval_seconds error, got: %v", err)
+	}
+
+	cfg.RequestDetail.CleanupIntervalSeconds = 60
+	cfg.RequestDetail.CleanupBatchSize = 0
+	err = cfg.Validate()
+	if err == nil {
+		t.Fatalf("Validate() expected error for request_detail.cleanup_batch_size, got nil")
+	}
+	if !strings.Contains(err.Error(), "request_detail.cleanup_batch_size") {
+		t.Fatalf("Validate() expected cleanup_batch_size error, got: %v", err)
 	}
 }
 

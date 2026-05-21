@@ -99,23 +99,53 @@ type RequestDetailRepository interface {
 	GetImageArtifact(ctx context.Context, requestID string, artifactID int64) (*RequestDetailImageArtifact, error)
 }
 
+type RequestDetailCleanupRepository interface {
+	DeleteBefore(ctx context.Context, before time.Time, limit int) (int64, error)
+}
+
+type RequestDetailRetentionConfig struct {
+	RetentionDays    int
+	CleanupInterval  time.Duration
+	CleanupBatchSize int
+}
+
 type RequestDetailService struct {
 	repo          RequestDetailRepository
 	backupService *BackupService
 	queue         chan *RequestDetail
 	stopCh        chan struct{}
 	doneCh        chan struct{}
+	cleanupDoneCh chan struct{}
+	retention     RequestDetailRetentionConfig
 	started       atomic.Bool
 	stopped       atomic.Bool
 }
 
-func NewRequestDetailService(repo RequestDetailRepository) *RequestDetailService {
-	return &RequestDetailService{
-		repo:   repo,
-		queue:  make(chan *RequestDetail, 1024),
-		stopCh: make(chan struct{}),
-		doneCh: make(chan struct{}),
+func NewRequestDetailService(repo RequestDetailRepository, retentionConfig ...RequestDetailRetentionConfig) *RequestDetailService {
+	var retention RequestDetailRetentionConfig
+	if len(retentionConfig) > 0 {
+		retention = retentionConfig[0]
 	}
+	return &RequestDetailService{
+		repo:      repo,
+		queue:     make(chan *RequestDetail, 1024),
+		stopCh:    make(chan struct{}),
+		doneCh:    make(chan struct{}),
+		retention: normalizeRequestDetailRetentionConfig(retention),
+	}
+}
+
+func normalizeRequestDetailRetentionConfig(cfg RequestDetailRetentionConfig) RequestDetailRetentionConfig {
+	if cfg.RetentionDays <= 0 {
+		return RequestDetailRetentionConfig{}
+	}
+	if cfg.CleanupInterval <= 0 {
+		cfg.CleanupInterval = 24 * time.Hour
+	}
+	if cfg.CleanupBatchSize <= 0 {
+		cfg.CleanupBatchSize = 5000
+	}
+	return cfg
 }
 
 func (s *RequestDetailService) SetBackupService(backupService *BackupService) {
@@ -131,6 +161,7 @@ func (s *RequestDetailService) Start() {
 	}
 	s.stopped.Store(false)
 	go s.run()
+	s.startCleanup()
 }
 
 func (s *RequestDetailService) Stop() {
@@ -140,6 +171,9 @@ func (s *RequestDetailService) Stop() {
 	s.stopped.Store(true)
 	close(s.stopCh)
 	<-s.doneCh
+	if s.cleanupDoneCh != nil {
+		<-s.cleanupDoneCh
+	}
 }
 
 func (s *RequestDetailService) Enqueue(detail *RequestDetail) bool {
@@ -202,6 +236,61 @@ func (s *RequestDetailService) WriteBackupNDJSON(ctx context.Context, filters Re
 	return s.repo.StreamAll(ctx, filters, func(detail RequestDetail) error {
 		return enc.Encode(detail)
 	})
+}
+
+func (s *RequestDetailService) startCleanup() {
+	if s == nil || s.retention.RetentionDays <= 0 {
+		return
+	}
+	if _, ok := s.repo.(RequestDetailCleanupRepository); !ok {
+		logger.LegacyPrintf("service.request_detail", "request detail cleanup disabled: repository does not support cleanup")
+		return
+	}
+	s.cleanupDoneCh = make(chan struct{})
+	go s.runCleanup()
+}
+
+func (s *RequestDetailService) runCleanup() {
+	defer close(s.cleanupDoneCh)
+	s.cleanupExpired()
+
+	ticker := time.NewTicker(s.retention.CleanupInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			s.cleanupExpired()
+		case <-s.stopCh:
+			return
+		}
+	}
+}
+
+func (s *RequestDetailService) cleanupExpired() {
+	if s == nil || s.retention.RetentionDays <= 0 {
+		return
+	}
+	repo, ok := s.repo.(RequestDetailCleanupRepository)
+	if !ok {
+		return
+	}
+	cutoff := time.Now().AddDate(0, 0, -s.retention.RetentionDays)
+	batchSize := s.retention.CleanupBatchSize
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		deleted, err := repo.DeleteBefore(ctx, cutoff, batchSize)
+		cancel()
+		if err != nil {
+			logger.LegacyPrintf("service.request_detail", "cleanup expired request details failed cutoff=%s err=%v", cutoff.Format(time.RFC3339), err)
+			return
+		}
+		if deleted > 0 {
+			logger.LegacyPrintf("service.request_detail", "cleaned expired request details cutoff=%s count=%d", cutoff.Format(time.RFC3339), deleted)
+		}
+		if deleted <= 0 || deleted < int64(batchSize) {
+			return
+		}
+	}
 }
 
 func (s *RequestDetailService) run() {

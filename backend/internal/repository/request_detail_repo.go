@@ -229,6 +229,36 @@ func (r *requestDetailRepository) StreamAll(ctx context.Context, filters service
 	return rows.Err()
 }
 
+func (r *requestDetailRepository) DeleteBefore(ctx context.Context, before time.Time, limit int) (int64, error) {
+	if limit <= 0 {
+		limit = 5000
+	}
+	query := `
+		WITH victims AS (
+			SELECT request_id
+			FROM request_details
+			WHERE COALESCE(completed_at, created_at) < $1
+			ORDER BY COALESCE(completed_at, created_at) ASC, id ASC
+			LIMIT $2
+		),
+		deleted_artifacts AS (
+			DELETE FROM request_detail_image_artifacts
+			WHERE request_id IN (SELECT request_id FROM victims)
+		),
+		deleted_details AS (
+			DELETE FROM request_details
+			WHERE request_id IN (SELECT request_id FROM victims)
+			RETURNING 1
+		)
+		SELECT COUNT(*) FROM deleted_details
+	`
+	var deleted int64
+	if err := scanSingleRow(ctx, r.sql, query, []any{before, limit}, &deleted); err != nil {
+		return 0, err
+	}
+	return deleted, nil
+}
+
 func (r *requestDetailRepository) CreateImageArtifacts(ctx context.Context, artifacts []service.RequestDetailImageArtifact) error {
 	if len(artifacts) == 0 {
 		return nil

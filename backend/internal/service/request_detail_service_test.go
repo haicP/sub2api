@@ -11,8 +11,11 @@ import (
 )
 
 type requestDetailRepoStub struct {
-	mu      sync.Mutex
-	created []RequestDetail
+	mu            sync.Mutex
+	created       []RequestDetail
+	deletedBefore []time.Time
+	deleteLimit   []int
+	deleteCount   int64
 }
 
 func (s *requestDetailRepoStub) Create(_ context.Context, detail *RequestDetail) error {
@@ -46,6 +49,16 @@ func (s *requestDetailRepoStub) GetImageArtifact(context.Context, string, int64)
 	return nil, nil
 }
 
+func (s *requestDetailRepoStub) DeleteBefore(_ context.Context, before time.Time, limit int) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.deletedBefore = append(s.deletedBefore, before)
+	s.deleteLimit = append(s.deleteLimit, limit)
+	deleted := s.deleteCount
+	s.deleteCount = 0
+	return deleted, nil
+}
+
 func TestRequestDetailServiceCreateAsyncFlushesOnStop(t *testing.T) {
 	repo := &requestDetailRepoStub{}
 	svc := NewRequestDetailService(repo)
@@ -67,4 +80,29 @@ func TestRequestDetailServiceEnqueueReturnsFalseAfterStop(t *testing.T) {
 
 	require.False(t, svc.Enqueue(&RequestDetail{RequestID: "req-after-stop", CreatedAt: time.Now()}))
 	require.Len(t, repo.created, 0)
+}
+
+func TestRequestDetailServiceCleansExpiredDetailsOnStart(t *testing.T) {
+	repo := &requestDetailRepoStub{}
+	svc := NewRequestDetailService(repo, RequestDetailRetentionConfig{
+		RetentionDays:    7,
+		CleanupInterval:  time.Hour,
+		CleanupBatchSize: 123,
+	})
+
+	startedAt := time.Now()
+	svc.Start()
+	defer svc.Stop()
+
+	require.Eventually(t, func() bool {
+		repo.mu.Lock()
+		defer repo.mu.Unlock()
+		return len(repo.deletedBefore) == 1
+	}, time.Second, 10*time.Millisecond)
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	require.Len(t, repo.deleteLimit, 1)
+	require.Equal(t, 123, repo.deleteLimit[0])
+	require.WithinDuration(t, startedAt.AddDate(0, 0, -7), repo.deletedBefore[0], 2*time.Second)
 }
