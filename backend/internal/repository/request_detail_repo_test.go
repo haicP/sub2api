@@ -316,14 +316,14 @@ func TestRequestDetailRepositoryStreamAllReturnsFullBodies(t *testing.T) {
 func TestRequestDetailRepositoryDeleteBeforeDeletesDetailsAndArtifacts(t *testing.T) {
 	ctx := context.Background()
 	db, mock := newSQLMock(t)
-	repo := NewRequestDetailRepository(nil, db)
+	repo := &requestDetailRepository{sql: db}
 
 	cutoff := time.Date(2026, 5, 14, 0, 0, 0, 0, time.UTC)
 	mock.ExpectQuery(regexp.QuoteMeta("WITH victims AS")).
 		WithArgs(cutoff, 5000).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(3)))
 
-	deleted, err := repo.(*requestDetailRepository).DeleteBefore(ctx, cutoff, 0)
+	deleted, err := repo.DeleteBefore(ctx, cutoff, 0)
 	require.NoError(t, err)
 	require.Equal(t, int64(3), deleted)
 	require.NoError(t, mock.ExpectationsWereMet())
