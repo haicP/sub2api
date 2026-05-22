@@ -19,19 +19,22 @@ type requestDetailRepository struct {
 }
 
 const requestDetailSelectColumns = `
-	id, request_id, created_at, completed_at, duration_ms, status_code, success,
-	platform, endpoint, upstream_endpoint, model, upstream_model, stream,
-	user_id, api_key_id, account_id, group_id, subscription_id, ip_address, user_agent,
-	request_headers, %s, response_headers, %s,
-	response_truncated, error_message,
-	COALESCE(NULLIF(request_body_raw_bytes, 0), octet_length(request_body), 0),
-	COALESCE(NULLIF(upstream_request_body_raw_bytes, 0), octet_length(upstream_request_body), 0),
-	COALESCE(NULLIF(response_content_raw_bytes, 0), octet_length(response_content), 0),
-	COALESCE(NULLIF(response_body_raw_bytes, 0), octet_length(response_body), 0),
-	request_body_blob_id, request_body_sha256,
-	upstream_request_body_blob_id, upstream_request_body_sha256,
-	response_content_blob_id, response_content_sha256,
-	response_body_blob_id, response_body_sha256
+	request_details.id, request_details.request_id, request_details.created_at, request_details.completed_at,
+	request_details.duration_ms, request_details.status_code, request_details.success,
+	request_details.platform, request_details.endpoint, request_details.upstream_endpoint,
+	request_details.model, request_details.upstream_model, request_details.stream,
+	request_details.user_id, request_details.api_key_id, request_details.account_id,
+	request_details.group_id, request_details.subscription_id, request_details.ip_address, request_details.user_agent,
+	request_details.request_headers, %s, request_details.response_headers, %s,
+	request_details.response_truncated, request_details.error_message,
+	COALESCE(NULLIF(request_details.request_body_raw_bytes, 0), octet_length(request_details.request_body), 0),
+	COALESCE(NULLIF(request_details.upstream_request_body_raw_bytes, 0), octet_length(request_details.upstream_request_body), 0),
+	COALESCE(NULLIF(request_details.response_content_raw_bytes, 0), octet_length(request_details.response_content), 0),
+	COALESCE(NULLIF(request_details.response_body_raw_bytes, 0), octet_length(request_details.response_body), 0),
+	request_details.request_body_blob_id, request_details.request_body_sha256,
+	request_details.upstream_request_body_blob_id, request_details.upstream_request_body_sha256,
+	request_details.response_content_blob_id, request_details.response_content_sha256,
+	request_details.response_body_blob_id, request_details.response_body_sha256
 `
 
 const requestDetailRequestBodyListColumns = `
@@ -278,7 +281,7 @@ func (r *requestDetailRepository) List(ctx context.Context, params pagination.Pa
 	query := fmt.Sprintf(`
 		SELECT %s
 		FROM request_details %s
-		ORDER BY %s %s, id DESC
+		ORDER BY %s %s, request_details.id DESC
 		LIMIT $%d OFFSET $%d
 	`, selectColumns, where, sortBy, sortOrder, len(args)+1, len(args)+2)
 	queryArgs := append(append([]any{}, args...), params.Limit(), params.Offset())
@@ -302,7 +305,7 @@ func (r *requestDetailRepository) GetByID(ctx context.Context, id int64) (*servi
 		SELECT ` + selectColumns + `
 		FROM request_details
 		` + requestDetailBodyJoins + `
-		WHERE id = $1`
+		WHERE request_details.id = $1`
 
 	rows, err := r.sql.QueryContext(ctx, query, id)
 	if err != nil {
@@ -336,7 +339,7 @@ func (r *requestDetailRepository) StreamAll(ctx context.Context, filters service
 		FROM request_details
 		` + requestDetailBodyJoins + `
 		` + where + `
-		ORDER BY COALESCE(completed_at, created_at) ASC, id ASC
+		ORDER BY COALESCE(request_details.completed_at, request_details.created_at) ASC, request_details.id ASC
 	`
 	rows, err := r.sql.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -370,8 +373,8 @@ func (r *requestDetailRepository) DeleteBefore(ctx context.Context, before time.
 			SELECT request_id, request_body_blob_id, upstream_request_body_blob_id,
 				response_content_blob_id, response_body_blob_id
 			FROM request_details
-			WHERE COALESCE(completed_at, created_at) < $1
-			ORDER BY COALESCE(completed_at, created_at) ASC, id ASC
+			WHERE COALESCE(request_details.completed_at, request_details.created_at) < $1
+			ORDER BY COALESCE(request_details.completed_at, request_details.created_at) ASC, request_details.id ASC
 			LIMIT $2
 		),
 		victim_blobs AS (
@@ -1025,49 +1028,49 @@ func buildRequestDetailWhere(filters service.RequestDetailFilters) (string, []an
 	}
 
 	if filters.StartTime != nil {
-		add("COALESCE(completed_at, created_at) >= $%d", *filters.StartTime)
+		add("COALESCE(request_details.completed_at, request_details.created_at) >= $%d", *filters.StartTime)
 	}
 	if filters.EndTime != nil {
-		add("COALESCE(completed_at, created_at) < $%d", *filters.EndTime)
+		add("COALESCE(request_details.completed_at, request_details.created_at) < $%d", *filters.EndTime)
 	}
 	if requestID := strings.TrimSpace(filters.RequestID); requestID != "" {
-		add("request_id = $%d", requestID)
+		add("request_details.request_id = $%d", requestID)
 	}
 	if filters.UserID != nil {
-		add("user_id = $%d", *filters.UserID)
+		add("request_details.user_id = $%d", *filters.UserID)
 	}
 	if user := strings.TrimSpace(filters.User); user != "" {
-		addRepeated("user_id IN (SELECT id FROM users WHERE deleted_at IS NULL AND (email ILIKE '%%' || $%d || '%%' OR username ILIKE '%%' || $%d || '%%'))", user)
+		addRepeated("request_details.user_id IN (SELECT id FROM users WHERE deleted_at IS NULL AND (email ILIKE '%%' || $%d || '%%' OR username ILIKE '%%' || $%d || '%%'))", user)
 	}
 	if filters.APIKeyID != nil {
-		add("api_key_id = $%d", *filters.APIKeyID)
+		add("request_details.api_key_id = $%d", *filters.APIKeyID)
 	}
 	if apiKey := strings.TrimSpace(filters.APIKey); apiKey != "" {
-		addRepeated("api_key_id IN (SELECT id FROM api_keys WHERE deleted_at IS NULL AND (key ILIKE '%%' || $%d || '%%' OR name ILIKE '%%' || $%d || '%%'))", apiKey)
+		addRepeated("request_details.api_key_id IN (SELECT id FROM api_keys WHERE deleted_at IS NULL AND (key ILIKE '%%' || $%d || '%%' OR name ILIKE '%%' || $%d || '%%'))", apiKey)
 	}
 	if filters.AccountID != nil {
-		add("account_id = $%d", *filters.AccountID)
+		add("request_details.account_id = $%d", *filters.AccountID)
 	}
 	if filters.GroupID != nil {
-		add("group_id = $%d", *filters.GroupID)
+		add("request_details.group_id = $%d", *filters.GroupID)
 	}
 	if platform := strings.TrimSpace(filters.Platform); platform != "" {
-		add("platform = $%d", platform)
+		add("request_details.platform = $%d", platform)
 	}
 	if model := strings.TrimSpace(filters.Model); model != "" {
-		add("model ILIKE '%%' || $%d || '%%'", model)
+		add("request_details.model ILIKE '%%' || $%d || '%%'", model)
 	}
 	if endpoint := strings.TrimSpace(filters.Endpoint); endpoint != "" {
-		add("endpoint ILIKE '%%' || $%d || '%%'", endpoint)
+		add("request_details.endpoint ILIKE '%%' || $%d || '%%'", endpoint)
 	}
 	if filters.StatusCode != nil {
-		add("status_code = $%d", *filters.StatusCode)
+		add("request_details.status_code = $%d", *filters.StatusCode)
 	}
 	if filters.Success != nil {
-		add("success = $%d", *filters.Success)
+		add("request_details.success = $%d", *filters.Success)
 	}
 	if filters.Stream != nil {
-		add("stream = $%d", *filters.Stream)
+		add("request_details.stream = $%d", *filters.Stream)
 	}
 
 	if len(conditions) == 0 {
@@ -1123,21 +1126,21 @@ func timeNowUTC() time.Time {
 func normalizeRequestDetailSort(value string) string {
 	switch strings.TrimSpace(strings.ToLower(value)) {
 	case "id":
-		return "id"
+		return "request_details.id"
 	case "created_at":
-		return "created_at"
+		return "request_details.created_at"
 	case "completed_at":
-		return "COALESCE(completed_at, created_at)"
+		return "COALESCE(request_details.completed_at, request_details.created_at)"
 	case "status_code":
-		return "status_code"
+		return "request_details.status_code"
 	case "duration_ms":
-		return "duration_ms"
+		return "request_details.duration_ms"
 	case "model":
-		return "model"
+		return "request_details.model"
 	case "platform":
-		return "platform"
+		return "request_details.platform"
 	default:
-		return "COALESCE(completed_at, created_at)"
+		return "COALESCE(request_details.completed_at, request_details.created_at)"
 	}
 }
 

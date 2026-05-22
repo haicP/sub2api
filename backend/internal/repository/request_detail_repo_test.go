@@ -119,7 +119,7 @@ func TestRequestDetailRepositoryCreateListAndGet(t *testing.T) {
 	listRows := requestDetailRows().
 		AddRow(requestDetailRowValues(t, int64(11), "req-detail-1", createdAt, completedAt, durationMs, statusCode, true, "openai", "/v1/chat/completions", "/v1/responses", "gpt-5.1", "gpt-5.1-upstream", true, userID, apiKeyID, accountID, groupID, subscriptionID, "127.0.0.1", "sub2api-test", requestHeaders, "", "", responseHeaders, "", "", true, "request failed", len(largeRequestBody), len(largeRequestBody), len(responseContent), len(responseBody))...)
 
-	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM request_details WHERE request_id = \\$1 AND user_id = \\$2 AND platform = \\$3").
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM request_details WHERE request_details\\.request_id = \\$1 AND request_details\\.user_id = \\$2 AND request_details\\.platform = \\$3").
 		WithArgs("req-detail-1", userID, "openai").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
 	mock.ExpectQuery(regexp.QuoteMeta("'' AS request_body")).
@@ -172,10 +172,10 @@ func TestRequestDetailRepositoryListUsesCompletedTimeForDefaultSortAndDateFilter
 	createdAt := start.Add(-30 * time.Second)
 	completedAt := start.Add(27 * time.Second)
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) FROM request_details WHERE COALESCE(completed_at, created_at) >= $1 AND COALESCE(completed_at, created_at) < $2")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) FROM request_details WHERE COALESCE(request_details.completed_at, request_details.created_at) >= $1 AND COALESCE(request_details.completed_at, request_details.created_at) < $2")).
 		WithArgs(start, end).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
-	mock.ExpectQuery(regexp.QuoteMeta("ORDER BY COALESCE(completed_at, created_at) desc, id DESC")).
+	mock.ExpectQuery(regexp.QuoteMeta("ORDER BY COALESCE(request_details.completed_at, request_details.created_at) desc, request_details.id DESC")).
 		WithArgs(start, end, 10, 0).
 		WillReturnRows(requestDetailRows().
 			AddRow(requestDetailRowValues(t, int64(32), "req-image", createdAt, completedAt, 38877, 200, true, "openai", "/v1/images/generations", "/v1/images/generations", "gpt-image-2", "gpt-image-2", false, int64(1), int64(1), nil, nil, nil, "127.0.0.1", "ua", map[string][]string{}, "", "", map[string][]string{}, "", "", false, "", 49, 0, 0, 748)...))
@@ -197,7 +197,7 @@ func TestRequestDetailRepositoryListFiltersByAPIKeyAndUserText(t *testing.T) {
 	db, mock := newSQLMock(t)
 	repo := NewRequestDetailRepository(nil, db)
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) FROM request_details WHERE user_id IN (SELECT id FROM users WHERE deleted_at IS NULL AND (email ILIKE '%' || $1 || '%' OR username ILIKE '%' || $1 || '%')) AND api_key_id IN (SELECT id FROM api_keys WHERE deleted_at IS NULL AND (key ILIKE '%' || $2 || '%' OR name ILIKE '%' || $2 || '%'))")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) FROM request_details WHERE request_details.user_id IN (SELECT id FROM users WHERE deleted_at IS NULL AND (email ILIKE '%' || $1 || '%' OR username ILIKE '%' || $1 || '%')) AND request_details.api_key_id IN (SELECT id FROM api_keys WHERE deleted_at IS NULL AND (key ILIKE '%' || $2 || '%' OR name ILIKE '%' || $2 || '%'))")).
 		WithArgs("admin@example.com", "prod-key").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(0)))
 
@@ -307,7 +307,7 @@ func TestRequestDetailRepositoryStreamAllReturnsFullBodies(t *testing.T) {
 	rows := requestDetailRows().
 		AddRow(requestDetailRowValues(t, int64(1), "req-1", createdAt, nil, nil, 200, true, "anthropic", "/v1/messages", "/v1/messages", "claude", "claude", false, nil, nil, nil, nil, nil, "127.0.0.1", "ua", map[string][]string{"Content-Type": {"application/json"}}, `{"input":"x"}`, `{"upstream":"y"}`, map[string][]string{"X-Request-ID": {"1"}}, `hello`, `{"output":"z"}`, false, "", 13, len(`{"upstream":"y"}`), len(`hello`), 14)...)
 
-	mock.ExpectQuery("ORDER BY COALESCE\\(completed_at, created_at\\) ASC, id ASC").
+	mock.ExpectQuery("(?s)FROM request_details\\s+LEFT JOIN request_detail_body_blobs rb ON rb\\.id = request_details\\.request_body_blob_id.*ORDER BY COALESCE\\(request_details\\.completed_at, request_details\\.created_at\\) ASC, request_details\\.id ASC").
 		WillReturnRows(rows)
 	mock.ExpectQuery("FROM request_detail_image_artifacts").
 		WithArgs("req-1").
