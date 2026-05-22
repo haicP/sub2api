@@ -364,11 +364,12 @@ func TestRequestDetailBackupStartBackupReturnsRunningAndCompletesAsync(t *testin
 	t.Cleanup(func() { requestDetailBackupNow = originalNow })
 
 	blockCh := make(chan struct{})
+	detailCreatedAt := time.Date(2026, 5, 22, 22, 10, 0, 0, time.Local)
 	repo := &requestDetailBackupBlockingRepoStub{
 		blockCh: blockCh,
 		items: []RequestDetail{{
 			RequestID:    "req-async",
-			CreatedAt:    time.Now(),
+			CreatedAt:    detailCreatedAt,
 			RequestBody:  `{"a":1}`,
 			ResponseBody: `{"b":2}`,
 		}},
@@ -379,9 +380,8 @@ func TestRequestDetailBackupStartBackupReturnsRunningAndCompletesAsync(t *testin
 	record, err := svc.StartBackup(context.Background(), "manual")
 	require.NoError(t, err)
 	require.Equal(t, "running", record.Status)
-	require.NotEmpty(t, record.S3Key)
-	require.Equal(t, "request_details_20260522_093000_0930_0930_part001.ndjson.gz", record.FileName)
-	require.Equal(t, "backups/request-details/20260522/request_details_20260522_093000_0930_0930_part001.ndjson.gz", record.S3Key)
+	require.Empty(t, record.FileName)
+	require.Empty(t, record.S3Key)
 
 	close(blockCh)
 	require.Eventually(t, func() bool {
@@ -393,6 +393,8 @@ func TestRequestDetailBackupStartBackupReturnsRunningAndCompletesAsync(t *testin
 	require.NoError(t, err)
 	require.Len(t, final.Parts, 1)
 	require.Equal(t, 1, final.Parts[0].Index)
+	require.Equal(t, "request_details_20260522_093000_2210_2210_part001.ndjson.gz", final.Parts[0].FileName)
+	require.Equal(t, "backups/request-details/20260522/request_details_20260522_093000_2210_2210_part001.ndjson.gz", final.Parts[0].S3Key)
 	require.Equal(t, final.FileName, final.Parts[0].FileName)
 	require.Equal(t, final.S3Key, final.Parts[0].S3Key)
 	require.Equal(t, final.SizeBytes, final.Parts[0].SizeBytes)

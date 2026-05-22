@@ -337,6 +337,40 @@ describe('RequestDetailsView', () => {
     expect(wrapper.text()).toContain('3.00 M')
   })
 
+  it('运行中的备份不显示启动时间拼出的占位文件名', async () => {
+    listMock.mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 20, pages: 1 })
+    listBackupsMock.mockResolvedValueOnce({
+      items: [{
+        id: 'backup-running',
+        status: 'running',
+        backup_type: 'request_details',
+        file_name: '',
+        s3_key: '',
+        size_bytes: 0,
+        triggered_by: 'manual',
+        started_at: '2026-05-23T00:42:00Z',
+        progress: 'exporting'
+      }]
+    })
+    getBackupScheduleMock.mockResolvedValueOnce({ enabled: false, cron_expr: '0 2 * * *', retain_days: 0, retain_count: 0 })
+
+    const wrapper = mount(RequestDetailsView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          Pagination: true,
+          BaseDialog: BaseDialogStub
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('running / exporting')
+    expect(wrapper.text()).toContain('生成中')
+    expect(wrapper.text()).not.toContain('request_details_20260523_004200_0042_0042_part001.ndjson.gz')
+  })
+
   it('多 part 备份下载先显示分片列表再按分片下载', async () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
     listMock.mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 20, pages: 1 })
@@ -371,8 +405,8 @@ describe('RequestDetailsView', () => {
       url: 'https://example.com/part001',
       urls: ['https://example.com/part001', 'https://example.com/part002'],
       parts: [
-        { index: 1, file_name: 'part001.ndjson.gz', s3_key: 'part001', size_bytes: 1073741824, url: 'https://example.com/part001' },
-        { index: 2, file_name: 'part002.ndjson.gz', s3_key: 'part002', size_bytes: 1073741824, url: 'https://example.com/part002' }
+        { index: 1, file_name: 'part001.ndjson.gz', s3_key: 'hidden-s3-key-1', size_bytes: 1073741824, url: 'https://example.com/part001' },
+        { index: 2, file_name: 'part002.ndjson.gz', s3_key: 'hidden-s3-key-2', size_bytes: 1073741824, url: 'https://example.com/part002' }
       ]
     })
 
@@ -398,6 +432,9 @@ describe('RequestDetailsView', () => {
     expect(wrapper.text()).toContain('下载备份分片')
     expect(wrapper.text()).toContain('part001.ndjson.gz')
     expect(wrapper.text()).toContain('part002.ndjson.gz')
+    expect(wrapper.text()).not.toContain('S3 Key')
+    expect(wrapper.text()).not.toContain('hidden-s3-key-1')
+    expect(wrapper.text()).not.toContain('hidden-s3-key-2')
 
     const dialogDownloadButtons = wrapper.findAll('button').filter((button) => button.text() === '下载')
     await dialogDownloadButtons.at(-2)?.trigger('click')

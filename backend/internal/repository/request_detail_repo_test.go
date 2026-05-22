@@ -307,7 +307,7 @@ func TestRequestDetailRepositoryStreamAllReturnsFullBodies(t *testing.T) {
 	rows := requestDetailRows().
 		AddRow(requestDetailRowValues(t, int64(1), "req-1", createdAt, nil, nil, 200, true, "anthropic", "/v1/messages", "/v1/messages", "claude", "claude", false, nil, nil, nil, nil, nil, "127.0.0.1", "ua", map[string][]string{"Content-Type": {"application/json"}}, `{"input":"x"}`, `{"upstream":"y"}`, map[string][]string{"X-Request-ID": {"1"}}, `hello`, `{"output":"z"}`, false, "", 13, len(`{"upstream":"y"}`), len(`hello`), 14)...)
 
-	mock.ExpectQuery("(?s)FROM request_details\\s+LEFT JOIN request_detail_body_blobs rb ON rb\\.id = request_details\\.request_body_blob_id.*ORDER BY COALESCE\\(request_details\\.completed_at, request_details\\.created_at\\) ASC, request_details\\.id ASC").
+	mock.ExpectQuery("(?s)FROM request_details\\s+LEFT JOIN request_detail_body_blobs rb ON rb\\.id = request_details\\.request_body_blob_id.*ORDER BY request_details\\.created_at ASC, request_details\\.id ASC").
 		WillReturnRows(rows)
 	mock.ExpectQuery("FROM request_detail_image_artifacts").
 		WithArgs("req-1").

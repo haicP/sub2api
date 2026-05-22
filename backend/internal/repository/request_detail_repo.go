@@ -345,7 +345,7 @@ func (r *requestDetailRepository) StreamAll(ctx context.Context, filters service
 		FROM request_details
 		` + requestDetailBodyJoins + `
 		` + where + `
-		ORDER BY COALESCE(request_details.completed_at, request_details.created_at) ASC, request_details.id ASC
+		ORDER BY request_details.created_at ASC, request_details.id ASC
 	`
 	rows, err := r.sql.QueryContext(ctx, query, args...)
 	if err != nil {

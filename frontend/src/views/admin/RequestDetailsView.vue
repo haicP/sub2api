@@ -136,7 +136,7 @@
                 <td class="py-3 pr-4 font-mono text-xs">{{ backup.id }}</td>
                 <td class="py-3 pr-4 text-xs">{{ formatBackupStatus(backup) }}</td>
                 <td class="py-3 pr-4 text-xs">
-                  <div>{{ backup.file_name }}</div>
+                  <div>{{ formatBackupFileName(backup) }}</div>
                   <div v-if="backup.parts?.length && backup.parts.length > 1" class="text-gray-500 dark:text-gray-400">{{ backup.parts.length }} parts</div>
                 </td>
                 <td class="py-3 pr-4 text-xs">{{ formatSize(backup.size_bytes) }}</td>
@@ -302,24 +302,22 @@
     <div class="space-y-3">
       <p class="text-sm text-gray-500 dark:text-gray-400">{{ selectedBackupDownload?.file_name || selectedBackupDownload?.id }}</p>
       <div class="overflow-x-auto rounded border border-gray-200 dark:border-dark-700">
-        <table class="w-full min-w-[720px] text-sm">
+        <table class="w-full min-w-[640px] table-fixed text-sm">
           <thead>
             <tr class="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400">
-              <th class="px-3 py-2">分片</th>
+              <th class="w-16 px-3 py-2">分片</th>
               <th class="px-3 py-2">文件名</th>
-              <th class="px-3 py-2">大小</th>
-              <th class="px-3 py-2">S3 Key</th>
-              <th class="px-3 py-2">操作</th>
+              <th class="w-28 whitespace-nowrap px-3 py-2">大小</th>
+              <th class="w-20 whitespace-nowrap px-3 py-2 text-right">操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="part in backupDownloadParts" :key="part.index" class="border-b border-gray-100 dark:border-dark-800">
               <td class="px-3 py-2 font-mono text-xs">{{ part.index }}</td>
-              <td class="px-3 py-2 text-xs">{{ part.file_name }}</td>
-              <td class="px-3 py-2 text-xs">{{ formatSize(part.size_bytes) }}</td>
-              <td class="max-w-[280px] truncate px-3 py-2 font-mono text-xs" :title="part.s3_key">{{ part.s3_key }}</td>
-              <td class="px-3 py-2">
-                <button class="btn btn-secondary btn-sm" @click="openBackupPart(part.url)">下载</button>
+              <td class="truncate px-3 py-2 text-xs" :title="part.file_name">{{ part.file_name }}</td>
+              <td class="whitespace-nowrap px-3 py-2 text-xs">{{ formatSize(part.size_bytes) }}</td>
+              <td class="whitespace-nowrap px-3 py-2 text-right">
+                <button class="btn btn-secondary btn-sm whitespace-nowrap" @click="openBackupPart(part.url)">下载</button>
               </td>
             </tr>
           </tbody>
@@ -614,6 +612,7 @@ const formatSize = (value?: number) => {
 }
 const formatJSON = (value: unknown) => value ? JSON.stringify(value, null, 2) : ''
 const formatBackupStatus = (backup: RequestDetailBackupRecord) => backup.progress ? `${backup.status} / ${backup.progress}` : backup.status
+const formatBackupFileName = (backup: RequestDetailBackupRecord) => backup.file_name || (backup.status === 'running' ? '生成中' : '-')
 
 onMounted(async () => {
   await Promise.all([loadData(), loadBackups()])

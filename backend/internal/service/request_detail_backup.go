@@ -259,17 +259,13 @@ func (s *RequestDetailBackupService) startBackup(ctx context.Context, triggeredB
 	}
 
 	now := requestDetailBackupNow()
-	dateFolder := now.Format("20060102")
-	firstFileName := buildRequestDetailBackupFileName(now, now, now, 1)
 	record := &BackupRecord{
 		ID:          uuid.New().String()[:8],
 		Status:      "running",
 		BackupType:  "request_details",
-		FileName:    firstFileName,
 		TriggeredBy: triggeredBy,
 		StartedAt:   now.Format(time.RFC3339),
 	}
-	record.S3Key = buildRequestDetailBackupKey(cfg, dateFolder, record.FileName)
 	if err := s.saveRecord(ctx, record); err != nil {
 		return nil, err
 	}
