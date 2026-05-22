@@ -135,7 +135,10 @@
               <tr v-for="backup in backups" :key="backup.id" class="border-b border-gray-100 dark:border-dark-800">
                 <td class="py-3 pr-4 font-mono text-xs">{{ backup.id }}</td>
                 <td class="py-3 pr-4 text-xs">{{ formatBackupStatus(backup) }}</td>
-                <td class="py-3 pr-4 text-xs">{{ backup.file_name }}</td>
+                <td class="py-3 pr-4 text-xs">
+                  <div>{{ backup.file_name }}</div>
+                  <div v-if="backup.parts?.length && backup.parts.length > 1" class="text-gray-500 dark:text-gray-400">{{ backup.parts.length }} parts</div>
+                </td>
                 <td class="py-3 pr-4 text-xs">{{ formatSize(backup.size_bytes) }}</td>
                 <td class="py-3 pr-4 text-xs">{{ backup.triggered_by }}</td>
                 <td class="py-3 pr-4 text-xs">{{ formatDate(backup.started_at) }}</td>
@@ -481,7 +484,17 @@ const saveSchedule = async () => {
 const downloadBackup = async (id: string) => {
   try {
     const result = await requestDetailsAPI.getDownloadURL(id)
-    window.open(result.url, '_blank', 'noopener,noreferrer')
+    const urls = result.urls?.length ? result.urls : (result.url ? [result.url] : [])
+    if (!urls.length) {
+      appStore.showError('没有可用下载链接')
+      return
+    }
+    for (const url of urls) {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+    if (urls.length > 1) {
+      appStore.showSuccess(`已打开 ${urls.length} 个分包下载链接`)
+    }
   } catch (error) {
     appStore.showError((error as Error).message || '获取下载链接失败')
   }
@@ -521,7 +534,8 @@ const formatSize = (value?: number) => {
   if (typeof value !== 'number') return '-'
   if (value <= 1024) return `${value} B`
   if (value <= 1024 * 1024) return `${(value / 1024).toFixed(2)} KB`
-  return `${(value / 1024 / 1024).toFixed(2)} M`
+  if (value <= 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(2)} M`
+  return `${(value / 1024 / 1024 / 1024).toFixed(2)} G`
 }
 const formatJSON = (value: unknown) => value ? JSON.stringify(value, null, 2) : ''
 const formatBackupStatus = (backup: RequestDetailBackupRecord) => backup.progress ? `${backup.status} / ${backup.progress}` : backup.status

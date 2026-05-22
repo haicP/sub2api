@@ -80,6 +80,13 @@ export interface RequestDetailImageArtifact {
   updated_at: string
 }
 
+export interface RequestDetailBackupPart {
+  index: number
+  file_name: string
+  s3_key: string
+  size_bytes: number
+}
+
 export interface RequestDetailBackupRecord {
   id: string
   status: 'pending' | 'running' | 'completed' | 'failed'
@@ -87,6 +94,7 @@ export interface RequestDetailBackupRecord {
   file_name: string
   s3_key: string
   size_bytes: number
+  parts?: RequestDetailBackupPart[]
   triggered_by: string
   error_message?: string
   started_at: string
@@ -99,6 +107,16 @@ export interface RequestDetailBackupSchedule {
   cron_expr: string
   retain_days: number
   retain_count: number
+}
+
+export interface RequestDetailBackupDownloadPart extends RequestDetailBackupPart {
+  url: string
+}
+
+export interface RequestDetailBackupDownloadURLs {
+  url?: string
+  urls: string[]
+  parts: RequestDetailBackupDownloadPart[]
 }
 
 export async function list(
@@ -140,8 +158,8 @@ export async function getBackup(id: string): Promise<RequestDetailBackupRecord> 
   return data
 }
 
-export async function getDownloadURL(id: string): Promise<{ url: string }> {
-  const { data } = await apiClient.get<{ url: string }>(`/admin/request-details/backups/${id}/download-url`)
+export async function getDownloadURL(id: string): Promise<RequestDetailBackupDownloadURLs> {
+  const { data } = await apiClient.get<RequestDetailBackupDownloadURLs>(`/admin/request-details/backups/${id}/download-url`)
   return data
 }
 

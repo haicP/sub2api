@@ -92,23 +92,32 @@ type BackupScheduleConfig struct {
 	RetainCount int    `json:"retain_count"` // 最多保留份数，0=不限制
 }
 
+// BackupRecordPart describes one object in a multi-part backup.
+type BackupRecordPart struct {
+	Index     int    `json:"index"`
+	FileName  string `json:"file_name"`
+	S3Key     string `json:"s3_key"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
 // BackupRecord 备份记录
 type BackupRecord struct {
-	ID            string `json:"id"`
-	Status        string `json:"status"`      // pending, running, completed, failed
-	BackupType    string `json:"backup_type"` // postgres
-	FileName      string `json:"file_name"`
-	S3Key         string `json:"s3_key"`
-	SizeBytes     int64  `json:"size_bytes"`
-	TriggeredBy   string `json:"triggered_by"` // manual, scheduled
-	ErrorMsg      string `json:"error_message,omitempty"`
-	StartedAt     string `json:"started_at"`
-	FinishedAt    string `json:"finished_at,omitempty"`
-	ExpiresAt     string `json:"expires_at,omitempty"`     // 过期时间
-	Progress      string `json:"progress,omitempty"`       // "dumping", "uploading", ""
-	RestoreStatus string `json:"restore_status,omitempty"` // "", "running", "completed", "failed"
-	RestoreError  string `json:"restore_error,omitempty"`
-	RestoredAt    string `json:"restored_at,omitempty"`
+	ID            string             `json:"id"`
+	Status        string             `json:"status"`      // pending, running, completed, failed
+	BackupType    string             `json:"backup_type"` // postgres
+	FileName      string             `json:"file_name"`
+	S3Key         string             `json:"s3_key"`
+	SizeBytes     int64              `json:"size_bytes"`
+	Parts         []BackupRecordPart `json:"parts,omitempty"`
+	TriggeredBy   string             `json:"triggered_by"` // manual, scheduled
+	ErrorMsg      string             `json:"error_message,omitempty"`
+	StartedAt     string             `json:"started_at"`
+	FinishedAt    string             `json:"finished_at,omitempty"`
+	ExpiresAt     string             `json:"expires_at,omitempty"`     // 过期时间
+	Progress      string             `json:"progress,omitempty"`       // "dumping", "uploading", ""
+	RestoreStatus string             `json:"restore_status,omitempty"` // "", "running", "completed", "failed"
+	RestoreError  string             `json:"restore_error,omitempty"`
+	RestoredAt    string             `json:"restored_at,omitempty"`
 }
 
 // BackupService 数据库备份恢复服务

@@ -175,12 +175,12 @@ func (h *RequestDetailHandler) GetBackup(c *gin.Context) {
 }
 
 func (h *RequestDetailHandler) GetBackupDownloadURL(c *gin.Context) {
-	url, err := h.backup.GetBackupDownloadURL(c.Request.Context(), c.Param("id"))
+	result, err := h.backup.GetBackupDownloadURLs(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, gin.H{"url": url})
+	response.Success(c, result)
 }
 
 func (h *RequestDetailHandler) GetArtifactDownloadURL(c *gin.Context) {

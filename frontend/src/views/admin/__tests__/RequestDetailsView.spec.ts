@@ -3,12 +3,13 @@ import { defineComponent } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import RequestDetailsView from '../RequestDetailsView.vue'
 
-const { requestDetailsAPIMock, listMock, listBackupsMock, getBackupScheduleMock, getMock, getArtifactDownloadURLMock, copyToClipboardMock } = vi.hoisted(() => {
+const { requestDetailsAPIMock, listMock, listBackupsMock, getBackupScheduleMock, getMock, getDownloadURLMock, getArtifactDownloadURLMock, copyToClipboardMock } = vi.hoisted(() => {
   const requestDetailsAPIMock = {
     list: vi.fn(),
     listBackups: vi.fn(),
     getBackupSchedule: vi.fn(),
     get: vi.fn(),
+    getDownloadURL: vi.fn(),
     getArtifactDownloadURL: vi.fn()
   }
 
@@ -18,6 +19,7 @@ const { requestDetailsAPIMock, listMock, listBackupsMock, getBackupScheduleMock,
     listBackupsMock: requestDetailsAPIMock.listBackups,
     getBackupScheduleMock: requestDetailsAPIMock.getBackupSchedule,
     getMock: requestDetailsAPIMock.get,
+    getDownloadURLMock: requestDetailsAPIMock.getDownloadURL,
     getArtifactDownloadURLMock: requestDetailsAPIMock.getArtifactDownloadURL,
     copyToClipboardMock: vi.fn()
   }
@@ -331,6 +333,68 @@ describe('RequestDetailsView', () => {
 
     expect(wrapper.text()).toContain('1024.00 KB / 2.00 M')
     expect(wrapper.text()).toContain('3.00 M')
+  })
+
+  it('多 part 备份下载会逐个打开独立分包链接', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    listMock.mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 20, pages: 1 })
+    listBackupsMock.mockResolvedValueOnce({
+      items: [{
+        id: 'backup-1',
+        status: 'completed',
+        backup_type: 'request_details',
+        file_name: 'request_details_20260522_093000_part001.ndjson.gz',
+        s3_key: 'backups/request-details/20260522/request_details_20260522_093000_part001.ndjson.gz',
+        size_bytes: 2147483648,
+        parts: [
+          {
+            index: 1,
+            file_name: 'request_details_20260522_093000_part001.ndjson.gz',
+            s3_key: 'backups/request-details/20260522/request_details_20260522_093000_part001.ndjson.gz',
+            size_bytes: 1073741824
+          },
+          {
+            index: 2,
+            file_name: 'request_details_20260522_093000_part002.ndjson.gz',
+            s3_key: 'backups/request-details/20260522/request_details_20260522_093000_part002.ndjson.gz',
+            size_bytes: 1073741824
+          }
+        ],
+        triggered_by: 'manual',
+        started_at: '2026-05-22T09:30:00Z'
+      }]
+    })
+    getBackupScheduleMock.mockResolvedValueOnce({ enabled: false, cron_expr: '0 2 * * *', retain_days: 0, retain_count: 0 })
+    getDownloadURLMock.mockResolvedValueOnce({
+      url: 'https://example.com/part001',
+      urls: ['https://example.com/part001', 'https://example.com/part002'],
+      parts: [
+        { index: 1, file_name: 'part001.ndjson.gz', s3_key: 'part001', size_bytes: 1073741824, url: 'https://example.com/part001' },
+        { index: 2, file_name: 'part002.ndjson.gz', s3_key: 'part002', size_bytes: 1073741824, url: 'https://example.com/part002' }
+      ]
+    })
+
+    const wrapper = mount(RequestDetailsView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          Pagination: true,
+          BaseDialog: BaseDialogStub
+        }
+      }
+    })
+
+    await flushPromises()
+    expect(wrapper.text()).toContain('2 parts')
+    expect(wrapper.text()).toContain('2.00 G')
+
+    await wrapper.findAll('button').find((button) => button.text() === '下载')?.trigger('click')
+    await flushPromises()
+
+    expect(getDownloadURLMock).toHaveBeenCalledWith('backup-1')
+    expect(openSpy).toHaveBeenNthCalledWith(1, 'https://example.com/part001', '_blank', 'noopener,noreferrer')
+    expect(openSpy).toHaveBeenNthCalledWith(2, 'https://example.com/part002', '_blank', 'noopener,noreferrer')
+    openSpy.mockRestore()
   })
 
   it('大正文只渲染预览但复制完整内容', async () => {
