@@ -2,7 +2,10 @@ package repository
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/aws/smithy-go"
@@ -29,4 +32,19 @@ func TestIsS3Forbidden(t *testing.T) {
 	}))
 	require.True(t, isS3Forbidden(&smithy.GenericAPIError{Code: "AccessDenied", Message: "denied"}))
 	require.False(t, isS3Forbidden(fmt.Errorf("plain error")))
+}
+
+func TestSpoolBackupUploadBodyWritesReplayableTempFile(t *testing.T) {
+	payload := strings.Repeat("backup-data-", 1024)
+	tmp, sizeBytes, err := spoolBackupUploadBody(strings.NewReader(payload))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+	})
+
+	require.Equal(t, int64(len(payload)), sizeBytes)
+	out, err := io.ReadAll(tmp)
+	require.NoError(t, err)
+	require.Equal(t, payload, string(out))
 }

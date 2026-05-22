@@ -1,12 +1,12 @@
 package repository
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -62,18 +62,19 @@ func NewS3BackupStoreFactory() service.BackupObjectStoreFactory {
 }
 
 func (s *S3BackupStore) Upload(ctx context.Context, key string, body io.Reader, contentType string) (int64, error) {
-	// 读取全部内容以获取大小（S3 PutObject 需要知道内容长度）
-	// 注意：阿里云 OSS 不兼容 s3manager 分片上传的签名方式，因此使用 PutObject
-	data, err := io.ReadAll(body)
+	tmp, sizeBytes, err := spoolBackupUploadBody(body)
 	if err != nil {
-		return 0, fmt.Errorf("read body: %w", err)
+		return 0, err
 	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	defer func() { _ = tmp.Close() }()
 
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      &s.bucket,
-		Key:         &key,
-		Body:        bytes.NewReader(data),
-		ContentType: &contentType,
+		Bucket:        &s.bucket,
+		Key:           &key,
+		Body:          tmp,
+		ContentLength: aws.Int64(sizeBytes),
+		ContentType:   &contentType,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("S3 PutObject: %w", err)
@@ -93,10 +94,36 @@ func (s *S3BackupStore) Upload(ctx context.Context, key string, body io.Reader, 
 			}
 		}
 	}
-	if info.SizeBytes > 0 && info.SizeBytes != int64(len(data)) {
-		return 0, fmt.Errorf("S3 HeadObject size mismatch after PutObject: uploaded=%d stored=%d key=%s", len(data), info.SizeBytes, key)
+	if info.SizeBytes > 0 && info.SizeBytes != sizeBytes {
+		return 0, fmt.Errorf("S3 HeadObject size mismatch after PutObject: uploaded=%d stored=%d key=%s", sizeBytes, info.SizeBytes, key)
 	}
-	return int64(len(data)), nil
+	return sizeBytes, nil
+}
+
+func spoolBackupUploadBody(body io.Reader) (*os.File, int64, error) {
+	// PutObject needs a replayable body with a known size for broad S3-compatible
+	// storage support. Spool to disk so large backups do not have to fit in RAM.
+	tmp, err := os.CreateTemp("", "sub2api-s3-upload-*")
+	if err != nil {
+		return nil, 0, fmt.Errorf("create temp upload file: %w", err)
+	}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = tmp.Close()
+			_ = os.Remove(tmp.Name())
+		}
+	}()
+
+	sizeBytes, err := io.Copy(tmp, body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("spool upload body: %w", err)
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return nil, 0, fmt.Errorf("rewind temp upload file: %w", err)
+	}
+	cleanup = false
+	return tmp, sizeBytes, nil
 }
 
 func (s *S3BackupStore) Download(ctx context.Context, key string) (io.ReadCloser, error) {

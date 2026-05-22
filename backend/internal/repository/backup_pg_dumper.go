@@ -10,6 +10,11 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
+var pgDumpExcludedTables = []string{
+	"request_details",
+	"request_detail_image_artifacts",
+}
+
 // PgDumper implements service.DBDumper using pg_dump/psql
 type PgDumper struct {
 	cfg *config.DatabaseConfig
@@ -20,18 +25,26 @@ func NewPgDumper(cfg *config.Config) service.DBDumper {
 	return &PgDumper{cfg: &cfg.Database}
 }
 
-// Dump executes pg_dump and returns a streaming reader of the output
-func (d *PgDumper) Dump(ctx context.Context) (io.ReadCloser, error) {
+func buildPgDumpArgs(cfg *config.DatabaseConfig) []string {
 	args := []string{
-		"-h", d.cfg.Host,
-		"-p", fmt.Sprintf("%d", d.cfg.Port),
-		"-U", d.cfg.User,
-		"-d", d.cfg.DBName,
+		"-h", cfg.Host,
+		"-p", fmt.Sprintf("%d", cfg.Port),
+		"-U", cfg.User,
+		"-d", cfg.DBName,
 		"--no-owner",
 		"--no-acl",
 		"--clean",
 		"--if-exists",
 	}
+	for _, table := range pgDumpExcludedTables {
+		args = append(args, "--exclude-table-data="+table, "--exclude-table="+table)
+	}
+	return args
+}
+
+// Dump executes pg_dump and returns a streaming reader of the output
+func (d *PgDumper) Dump(ctx context.Context) (io.ReadCloser, error) {
+	args := buildPgDumpArgs(d.cfg)
 
 	cmd := exec.CommandContext(ctx, "pg_dump", args...)
 	if d.cfg.Password != "" {
