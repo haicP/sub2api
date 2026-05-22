@@ -80,14 +80,6 @@ func recordRequestDetailBackupFailure(record *BackupRecord, err error) {
 	record.FinishedAt = time.Now().Format(time.RFC3339)
 }
 
-func cleanupRequestDetailBackupTempParts(parts []requestDetailBackupTempPart) {
-	for _, part := range parts {
-		if part.tempPath != "" {
-			_ = os.Remove(part.tempPath)
-		}
-	}
-}
-
 func cleanupUploadedRequestDetailBackupParts(ctx context.Context, store BackupObjectStore, parts []BackupRecordPart) {
 	for _, part := range parts {
 		if strings.TrimSpace(part.S3Key) != "" {
