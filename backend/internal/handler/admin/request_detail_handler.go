@@ -174,6 +174,14 @@ func (h *RequestDetailHandler) GetBackup(c *gin.Context) {
 	response.Success(c, record)
 }
 
+func (h *RequestDetailHandler) DeleteBackup(c *gin.Context) {
+	if err := h.backup.DeleteBackup(c.Request.Context(), c.Param("id")); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "backup deleted"})
+}
+
 func (h *RequestDetailHandler) GetBackupDownloadURL(c *gin.Context) {
 	result, err := h.backup.GetBackupDownloadURLs(c.Request.Context(), c.Param("id"))
 	if err != nil {

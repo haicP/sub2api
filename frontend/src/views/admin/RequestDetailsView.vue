@@ -144,7 +144,10 @@
                 <td class="py-3 pr-4 text-xs">{{ formatDate(backup.started_at) }}</td>
                 <td class="max-w-[320px] truncate py-3 pr-4 text-xs text-red-600 dark:text-red-400" :title="backup.error_message || ''">{{ backup.error_message || '-' }}</td>
                 <td class="py-3">
-                  <button class="btn btn-secondary btn-sm" :disabled="backup.status !== 'completed'" @click="downloadBackup(backup.id)">下载</button>
+                  <div class="flex flex-wrap gap-2">
+                    <button class="btn btn-secondary btn-sm" :disabled="backup.status !== 'completed'" @click="downloadBackup(backup.id)">下载</button>
+                    <button class="btn btn-danger btn-sm" :disabled="backup.status === 'running'" @click="deleteBackupRecord(backup)">删除</button>
+                  </div>
                 </td>
               </tr>
               <tr v-if="!backups.length">
@@ -288,6 +291,46 @@
       <button class="btn btn-secondary" @click="closeDetailDialog">关闭</button>
     </template>
   </BaseDialog>
+
+  <BaseDialog
+    :show="backupPartsDialogOpen"
+    title="下载备份分片"
+    width="wide"
+    :close-on-click-outside="true"
+    @close="closeBackupPartsDialog"
+  >
+    <div class="space-y-3">
+      <p class="text-sm text-gray-500 dark:text-gray-400">{{ selectedBackupDownload?.file_name || selectedBackupDownload?.id }}</p>
+      <div class="overflow-x-auto rounded border border-gray-200 dark:border-dark-700">
+        <table class="w-full min-w-[720px] text-sm">
+          <thead>
+            <tr class="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400">
+              <th class="px-3 py-2">分片</th>
+              <th class="px-3 py-2">文件名</th>
+              <th class="px-3 py-2">大小</th>
+              <th class="px-3 py-2">S3 Key</th>
+              <th class="px-3 py-2">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="part in backupDownloadParts" :key="part.index" class="border-b border-gray-100 dark:border-dark-800">
+              <td class="px-3 py-2 font-mono text-xs">{{ part.index }}</td>
+              <td class="px-3 py-2 text-xs">{{ part.file_name }}</td>
+              <td class="px-3 py-2 text-xs">{{ formatSize(part.size_bytes) }}</td>
+              <td class="max-w-[280px] truncate px-3 py-2 font-mono text-xs" :title="part.s3_key">{{ part.s3_key }}</td>
+              <td class="px-3 py-2">
+                <button class="btn btn-secondary btn-sm" @click="openBackupPart(part.url)">下载</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <template #footer>
+      <button class="btn btn-secondary" @click="closeBackupPartsDialog">关闭</button>
+    </template>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
@@ -296,7 +339,7 @@ import { saveAs } from 'file-saver'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Pagination from '@/components/common/Pagination.vue'
-import { requestDetailsAPI, type RequestDetail, type RequestDetailBackupRecord, type RequestDetailBackupSchedule, type RequestDetailListParams, type RequestDetailSummary } from '@/api/admin/requestDetails'
+import { requestDetailsAPI, type RequestDetail, type RequestDetailBackupDownloadPart, type RequestDetailBackupRecord, type RequestDetailBackupSchedule, type RequestDetailListParams, type RequestDetailSummary } from '@/api/admin/requestDetails'
 import { useClipboard } from '@/composables/useClipboard'
 import { useAppStore } from '@/stores'
 
@@ -315,6 +358,9 @@ const detailDialogOpen = ref(false)
 const detailLoading = ref(false)
 const advancedFiltersOpen = ref(false)
 const backups = ref<RequestDetailBackupRecord[]>([])
+const selectedBackupDownload = ref<RequestDetailBackupRecord | null>(null)
+const backupDownloadParts = ref<RequestDetailBackupDownloadPart[]>([])
+const backupPartsDialogOpen = ref(false)
 const schedule = reactive<RequestDetailBackupSchedule>({
   enabled: false,
   cron_expr: '0 2 * * *',
@@ -481,22 +527,51 @@ const saveSchedule = async () => {
   }
 }
 
+const findBackupRecord = (id: string) => backups.value.find((backup) => backup.id === id) || null
+
 const downloadBackup = async (id: string) => {
   try {
     const result = await requestDetailsAPI.getDownloadURL(id)
-    const urls = result.urls?.length ? result.urls : (result.url ? [result.url] : [])
-    if (!urls.length) {
+    const parts = result.parts?.filter((part) => part.url) || []
+    if (parts.length > 1) {
+      selectedBackupDownload.value = findBackupRecord(id)
+      backupDownloadParts.value = parts
+      backupPartsDialogOpen.value = true
+      return
+    }
+    const url = parts[0]?.url || result.url || result.urls?.[0]
+    if (!url) {
       appStore.showError('没有可用下载链接')
       return
     }
-    for (const url of urls) {
-      window.open(url, '_blank', 'noopener,noreferrer')
-    }
-    if (urls.length > 1) {
-      appStore.showSuccess(`已打开 ${urls.length} 个分包下载链接`)
-    }
+    openBackupPart(url)
   } catch (error) {
     appStore.showError((error as Error).message || '获取下载链接失败')
+  }
+}
+
+const openBackupPart = (url?: string) => {
+  if (!url) {
+    appStore.showError('没有可用下载链接')
+    return
+  }
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+const closeBackupPartsDialog = () => {
+  backupPartsDialogOpen.value = false
+  selectedBackupDownload.value = null
+  backupDownloadParts.value = []
+}
+
+const deleteBackupRecord = async (backup: RequestDetailBackupRecord) => {
+  if (!window.confirm(`确定删除备份 ${backup.id} 吗？`)) return
+  try {
+    await requestDetailsAPI.deleteBackup(backup.id)
+    appStore.showSuccess('备份记录已删除')
+    await loadBackups()
+  } catch (error) {
+    appStore.showError((error as Error).message || '删除备份失败')
   }
 }
 

@@ -160,6 +160,10 @@ export async function getBackup(id: string): Promise<RequestDetailBackupRecord> 
   return data
 }
 
+export async function deleteBackup(id: string): Promise<void> {
+  await apiClient.delete(`/admin/request-details/backups/${id}`)
+}
+
 export async function getDownloadURL(id: string): Promise<RequestDetailBackupDownloadURLs> {
   const { data } = await apiClient.get<RequestDetailBackupDownloadURLs>(`/admin/request-details/backups/${id}/download-url`)
   return data
@@ -187,6 +191,7 @@ export const requestDetailsAPI = {
   createBackup,
   listBackups,
   getBackup,
+  deleteBackup,
   getDownloadURL,
   getArtifactDownloadURL,
   getBackupSchedule,

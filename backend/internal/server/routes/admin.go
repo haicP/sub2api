@@ -114,6 +114,7 @@ func registerRequestDetailRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		requestDetails.GET("/backups", h.Admin.RequestDetail.ListBackups)
 		requestDetails.GET("/backups/:id/download-url", h.Admin.RequestDetail.GetBackupDownloadURL)
 		requestDetails.GET("/backups/:id", h.Admin.RequestDetail.GetBackup)
+		requestDetails.DELETE("/backups/:id", h.Admin.RequestDetail.DeleteBackup)
 		requestDetails.GET("/:id/artifacts/:artifact_id/download-url", h.Admin.RequestDetail.GetArtifactDownloadURL)
 		requestDetails.GET("/:id", h.Admin.RequestDetail.Get)
 	}

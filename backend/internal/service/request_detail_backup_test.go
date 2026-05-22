@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -113,6 +114,16 @@ func (e requestDetailBackupPlainEncryptor) Encrypt(plaintext string) (string, er
 
 func (e requestDetailBackupPlainEncryptor) Decrypt(ciphertext string) (string, error) {
 	return strings.TrimPrefix(ciphertext, "ENC:"), nil
+}
+
+func TestRequestDetailBackupPartSizeIs200MB(t *testing.T) {
+	require.Equal(t, int64(200*1024*1024), requestDetailBackupPartSizeBytes)
+}
+
+func useFastRequestDetailBackupRetry(t *testing.T) {
+	originalBackoff := requestDetailBackupUploadRetryBaseBackoff
+	requestDetailBackupUploadRetryBaseBackoff = time.Millisecond
+	t.Cleanup(func() { requestDetailBackupUploadRetryBaseBackoff = originalBackoff })
 }
 
 func TestRequestDetailBackupWritesGzipNDJSON(t *testing.T) {
@@ -235,6 +246,7 @@ type requestDetailBackupStoreStub struct {
 	uploadNotified      bool
 	uploadErr           error
 	uploadHook          func() error
+	deleteErr           error
 	headObjectErr       error
 	headObjectSizeDelta int64
 	objects             map[string][]byte
@@ -292,6 +304,9 @@ func (s *requestDetailBackupStoreStub) Delete(_ context.Context, key string) err
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.deleted = append(s.deleted, key)
+	if s.deleteErr != nil {
+		return s.deleteErr
+	}
 	delete(s.objects, key)
 	return nil
 }
@@ -335,7 +350,11 @@ func newRequestDetailBackupTestService(repo RequestDetailRepository, store Backu
 	}
 	requestDetailSvc := NewRequestDetailService(repo)
 	requestDetailSvc.SetBackupService(backup)
-	return NewRequestDetailBackupService(requestDetailSvc, backup, settings)
+	svc := NewRequestDetailBackupService(requestDetailSvc, backup, settings)
+	if cacheDir, err := os.MkdirTemp("", "sub2api-request-detail-backup-test-*"); err == nil {
+		svc.SetCacheDir(cacheDir)
+	}
+	return svc
 }
 
 func TestRequestDetailBackupStartBackupReturnsRunningAndCompletesAsync(t *testing.T) {
@@ -361,8 +380,8 @@ func TestRequestDetailBackupStartBackupReturnsRunningAndCompletesAsync(t *testin
 	require.NoError(t, err)
 	require.Equal(t, "running", record.Status)
 	require.NotEmpty(t, record.S3Key)
-	require.Equal(t, "request_details_20260522_093000_part001.ndjson.gz", record.FileName)
-	require.Equal(t, "backups/request-details/20260522/request_details_20260522_093000_part001.ndjson.gz", record.S3Key)
+	require.Equal(t, "request_details_20260522_093000_0930_0930_part001.ndjson.gz", record.FileName)
+	require.Equal(t, "backups/request-details/20260522/request_details_20260522_093000_0930_0930_part001.ndjson.gz", record.S3Key)
 
 	close(blockCh)
 	require.Eventually(t, func() bool {
@@ -456,8 +475,8 @@ func TestRequestDetailBackupSplitsIntoIndependentGzipParts(t *testing.T) {
 	final, err := svc.GetBackupRecord(context.Background(), record.ID)
 	require.NoError(t, err)
 	require.Len(t, final.Parts, 2)
-	require.Equal(t, "backups/request-details/20260522/request_details_20260522_093000_part001.ndjson.gz", final.Parts[0].S3Key)
-	require.Equal(t, "backups/request-details/20260522/request_details_20260522_093000_part002.ndjson.gz", final.Parts[1].S3Key)
+	require.Equal(t, "backups/request-details/20260522/request_details_20260522_093000_0930_0930_part001.ndjson.gz", final.Parts[0].S3Key)
+	require.Equal(t, "backups/request-details/20260522/request_details_20260522_093000_0930_0930_part002.ndjson.gz", final.Parts[1].S3Key)
 	require.Equal(t, final.Parts[0].FileName, final.FileName)
 	require.Equal(t, final.Parts[0].S3Key, final.S3Key)
 
@@ -475,6 +494,89 @@ func TestRequestDetailBackupSplitsIntoIndependentGzipParts(t *testing.T) {
 		require.True(t, strings.HasSuffix(string(out), "\n"))
 	}
 	require.Equal(t, total, final.SizeBytes)
+}
+
+func TestRequestDetailBackupPartFileNameUsesFirstAndLastRequestMinute(t *testing.T) {
+	fixedNow := time.Date(2026, 5, 22, 9, 30, 0, 0, time.Local)
+	originalNow := requestDetailBackupNow
+	requestDetailBackupNow = func() time.Time { return fixedNow }
+	t.Cleanup(func() { requestDetailBackupNow = originalNow })
+
+	first := time.Date(2026, 5, 22, 22, 10, 30, 0, time.Local)
+	last := time.Date(2026, 5, 22, 23, 40, 0, 0, time.Local)
+	blockCh := make(chan struct{})
+	repo := &requestDetailBackupBlockingRepoStub{
+		blockCh: blockCh,
+		items: []RequestDetail{
+			{RequestID: "req-window-1", CreatedAt: first, RequestBody: `{"a":1}`},
+			{RequestID: "req-window-2", CreatedAt: last, RequestBody: `{"b":2}`},
+		},
+	}
+	store := newRequestDetailBackupStoreStub()
+	svc := newRequestDetailBackupTestService(repo, store, nil)
+
+	record, err := svc.StartBackup(context.Background(), "manual")
+	require.NoError(t, err)
+	close(blockCh)
+	require.Eventually(t, func() bool {
+		final, err := svc.GetBackupRecord(context.Background(), record.ID)
+		return err == nil && final.Status == "completed" && len(final.Parts) == 1
+	}, time.Second, 10*time.Millisecond)
+
+	final, err := svc.GetBackupRecord(context.Background(), record.ID)
+	require.NoError(t, err)
+	require.Equal(t, "request_details_20260522_093000_2210_2340_part001.ndjson.gz", final.Parts[0].FileName)
+	require.Contains(t, final.Parts[0].S3Key, "request_details_20260522_093000_2210_2340_part001.ndjson.gz")
+}
+
+func TestRequestDetailBackupContinuesExportWhileUploadIsBlocked(t *testing.T) {
+	originalPartSize := requestDetailBackupPartSizeBytes
+	requestDetailBackupPartSizeBytes = 1
+	t.Cleanup(func() { requestDetailBackupPartSizeBytes = originalPartSize })
+
+	blockCh := make(chan struct{})
+	now := time.Date(2026, 5, 22, 10, 0, 0, 0, time.Local)
+	repo := &requestDetailBackupBlockingRepoStub{
+		blockCh: blockCh,
+		items: []RequestDetail{
+			{RequestID: "req-parallel-1", CreatedAt: now},
+			{RequestID: "req-parallel-2", CreatedAt: now.Add(time.Minute)},
+			{RequestID: "req-parallel-3", CreatedAt: now.Add(2 * time.Minute)},
+		},
+	}
+	store := newRequestDetailBackupStoreStub()
+	uploadStarted := make(chan struct{})
+	releaseUpload := make(chan struct{})
+	firstUpload := true
+	store.uploadHook = func() error {
+		if firstUpload {
+			firstUpload = false
+			close(uploadStarted)
+			<-releaseUpload
+		}
+		return nil
+	}
+	svc := newRequestDetailBackupTestService(repo, store, nil)
+
+	record, err := svc.StartBackup(context.Background(), "manual")
+	require.NoError(t, err)
+	close(blockCh)
+
+	select {
+	case <-uploadStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first upload did not start")
+	}
+	require.Eventually(t, func() bool {
+		final, err := svc.GetBackupRecord(context.Background(), record.ID)
+		return err == nil && strings.Contains(final.Progress, "exported part 3")
+	}, time.Second, 10*time.Millisecond)
+
+	close(releaseUpload)
+	require.Eventually(t, func() bool {
+		final, err := svc.GetBackupRecord(context.Background(), record.ID)
+		return err == nil && final.Status == "completed" && len(final.Parts) == 3
+	}, time.Second, 10*time.Millisecond)
 }
 
 func TestRequestDetailBackupKeyUsesDateFolderAndTrimmedPrefix(t *testing.T) {
@@ -528,6 +630,7 @@ func TestRequestDetailBackupRecoverStaleRecords(t *testing.T) {
 }
 
 func TestRequestDetailBackupStartBackupUploadFailureIsRecordedAsync(t *testing.T) {
+	useFastRequestDetailBackupRetry(t)
 	blockCh := make(chan struct{})
 	repo := &requestDetailBackupBlockingRepoStub{
 		blockCh: blockCh,
@@ -551,7 +654,45 @@ func TestRequestDetailBackupStartBackupUploadFailureIsRecordedAsync(t *testing.T
 	}, time.Second, 10*time.Millisecond)
 }
 
+func TestRequestDetailBackupRetriesCurrentPartAndDeletesCacheAfterSuccess(t *testing.T) {
+	useFastRequestDetailBackupRetry(t)
+	blockCh := make(chan struct{})
+	repo := &requestDetailBackupBlockingRepoStub{
+		blockCh: blockCh,
+		items: []RequestDetail{{
+			RequestID: "req-retry",
+			CreatedAt: time.Now(),
+		}},
+	}
+	store := newRequestDetailBackupStoreStub()
+	uploadCount := 0
+	store.uploadHook = func() error {
+		uploadCount++
+		if uploadCount <= 2 {
+			return fmt.Errorf("temporary S3 PutObject failed")
+		}
+		return nil
+	}
+	svc := newRequestDetailBackupTestService(repo, store, nil)
+	cacheRoot := t.TempDir()
+	svc.SetCacheDir(cacheRoot)
+
+	record, err := svc.StartBackup(context.Background(), "manual")
+	require.NoError(t, err)
+	close(blockCh)
+	require.Eventually(t, func() bool {
+		final, err := svc.GetBackupRecord(context.Background(), record.ID)
+		return err == nil && final.Status == "completed" && len(final.Parts) == 1
+	}, time.Second, 10*time.Millisecond)
+
+	require.Equal(t, 3, uploadCount)
+	entries, err := os.ReadDir(cacheRoot)
+	require.NoError(t, err)
+	require.Empty(t, entries)
+}
+
 func TestRequestDetailBackupUploadFailureDeletesUploadedParts(t *testing.T) {
+	useFastRequestDetailBackupRetry(t)
 	originalPartSize := requestDetailBackupPartSizeBytes
 	requestDetailBackupPartSizeBytes = 1
 	t.Cleanup(func() { requestDetailBackupPartSizeBytes = originalPartSize })
@@ -568,7 +709,7 @@ func TestRequestDetailBackupUploadFailureDeletesUploadedParts(t *testing.T) {
 	uploadCount := 0
 	store.uploadHook = func() error {
 		uploadCount++
-		if uploadCount == 2 {
+		if uploadCount >= 2 {
 			return fmt.Errorf("S3 PutObject failed")
 		}
 		return nil
@@ -590,7 +731,55 @@ func TestRequestDetailBackupUploadFailureDeletesUploadedParts(t *testing.T) {
 	require.Contains(t, store.deleted[0], "part001")
 }
 
+func TestRequestDetailBackupDeleteRemovesPartsAndRecord(t *testing.T) {
+	store := newRequestDetailBackupStoreStub()
+	svc := newRequestDetailBackupTestService(&requestDetailBackupRepoStub{}, store, nil)
+	require.NoError(t, svc.saveRecord(context.Background(), &BackupRecord{
+		ID:         "backup-delete",
+		Status:     "completed",
+		BackupType: "request_details",
+		FileName:   "part001.ndjson.gz",
+		S3Key:      "backups/request-details/20260522/part001.ndjson.gz",
+		Parts: []BackupRecordPart{
+			{Index: 1, FileName: "part001.ndjson.gz", S3Key: "backups/request-details/20260522/part001.ndjson.gz", SizeBytes: 10},
+			{Index: 2, FileName: "part002.ndjson.gz", S3Key: "backups/request-details/20260522/part002.ndjson.gz", SizeBytes: 20},
+		},
+		StartedAt:   time.Now().Format(time.RFC3339),
+		TriggeredBy: "manual",
+	}))
+
+	require.NoError(t, svc.DeleteBackup(context.Background(), "backup-delete"))
+	_, err := svc.GetBackupRecord(context.Background(), "backup-delete")
+	require.ErrorIs(t, err, ErrBackupNotFound)
+	require.ElementsMatch(t, []string{
+		"backups/request-details/20260522/part001.ndjson.gz",
+		"backups/request-details/20260522/part002.ndjson.gz",
+	}, store.deleted)
+}
+
+func TestRequestDetailBackupDeleteIgnoresMissingS3Object(t *testing.T) {
+	store := newRequestDetailBackupStoreStub()
+	store.deleteErr = fmt.Errorf("not found")
+	svc := newRequestDetailBackupTestService(&requestDetailBackupRepoStub{}, store, nil)
+	require.NoError(t, svc.saveRecord(context.Background(), &BackupRecord{
+		ID:          "backup-missing-object",
+		Status:      "completed",
+		BackupType:  "request_details",
+		FileName:    "part001.ndjson.gz",
+		S3Key:       "backups/request-details/20260522/part001.ndjson.gz",
+		SizeBytes:   10,
+		StartedAt:   time.Now().Format(time.RFC3339),
+		TriggeredBy: "manual",
+	}))
+
+	require.NoError(t, svc.DeleteBackup(context.Background(), "backup-missing-object"))
+	_, err := svc.GetBackupRecord(context.Background(), "backup-missing-object")
+	require.ErrorIs(t, err, ErrBackupNotFound)
+	require.Equal(t, []string{"backups/request-details/20260522/part001.ndjson.gz"}, store.deleted)
+}
+
 func TestRequestDetailBackupStartBackupHeadObjectFailureIsRecordedAsync(t *testing.T) {
+	useFastRequestDetailBackupRetry(t)
 	blockCh := make(chan struct{})
 	repo := &requestDetailBackupBlockingRepoStub{
 		blockCh: blockCh,
@@ -615,6 +804,7 @@ func TestRequestDetailBackupStartBackupHeadObjectFailureIsRecordedAsync(t *testi
 }
 
 func TestRequestDetailBackupStartBackupHeadObjectSizeMismatchIsRecordedAsync(t *testing.T) {
+	useFastRequestDetailBackupRetry(t)
 	blockCh := make(chan struct{})
 	repo := &requestDetailBackupBlockingRepoStub{
 		blockCh: blockCh,
