@@ -91,6 +91,21 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	require.NoError(t, tx.QueryRowContext(context.Background(), "SELECT to_regclass('public.settings')").Scan(&settingsRegclass))
 	require.True(t, settingsRegclass.Valid, "expected settings table to exist")
 
+	// request detail body blobs should support compressed deduplicated bodies.
+	var requestDetailBodyBlobsRegclass sql.NullString
+	require.NoError(t, tx.QueryRowContext(context.Background(), "SELECT to_regclass('public.request_detail_body_blobs')").Scan(&requestDetailBodyBlobsRegclass))
+	require.True(t, requestDetailBodyBlobsRegclass.Valid, "expected request_detail_body_blobs table to exist")
+	requireColumn(t, tx, "request_detail_body_blobs", "sha256", "character varying", 64, false)
+	requireColumn(t, tx, "request_detail_body_blobs", "codec", "character varying", 16, false)
+	requireColumn(t, tx, "request_detail_body_blobs", "raw_size_bytes", "integer", 0, false)
+	requireColumn(t, tx, "request_detail_body_blobs", "compressed_size_bytes", "integer", 0, false)
+	requireColumn(t, tx, "request_detail_body_blobs", "content", "bytea", 0, false)
+	requireIndex(t, tx, "request_detail_body_blobs", "idx_request_detail_body_blobs_sha_size_codec")
+	requireColumn(t, tx, "request_details", "request_body_blob_id", "bigint", 0, true)
+	requireColumn(t, tx, "request_details", "upstream_request_body_blob_id", "bigint", 0, true)
+	requireColumn(t, tx, "request_details", "response_content_blob_id", "bigint", 0, true)
+	requireColumn(t, tx, "request_details", "response_body_blob_id", "bigint", 0, true)
+
 	// security_secrets table should exist
 	var securitySecretsRegclass sql.NullString
 	require.NoError(t, tx.QueryRowContext(context.Background(), "SELECT to_regclass('public.security_secrets')").Scan(&securitySecretsRegclass))

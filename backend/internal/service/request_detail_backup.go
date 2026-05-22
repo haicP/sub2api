@@ -342,14 +342,15 @@ func (s *RequestDetailBackupService) writeAndUploadRequestDetailBackupParts(ctx 
 		return nil
 	}
 
+	archiveWriter := NewRequestDetailBackupArchiveWriter(io.Discard)
 	err := s.requestDetailService.repo.StreamAll(ctx, filters, func(detail RequestDetail) error {
 		if current == nil {
 			if err := openNext(); err != nil {
 				return err
 			}
 		}
-		enc := json.NewEncoder(current)
-		if err := enc.Encode(detail); err != nil {
+		archiveWriter.Reset(current)
+		if err := archiveWriter.WriteDetail(detail); err != nil {
 			return err
 		}
 		if err := current.flush(); err != nil {

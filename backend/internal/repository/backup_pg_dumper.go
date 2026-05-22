@@ -12,6 +12,7 @@ import (
 
 var pgDumpExcludedTables = []string{
 	"request_details",
+	"request_detail_body_blobs",
 	"request_detail_image_artifacts",
 }
 

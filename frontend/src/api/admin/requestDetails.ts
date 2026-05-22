@@ -46,6 +46,8 @@ export interface RequestDetailSummary {
   ip_address: string
   user_agent: string
   request_body_bytes?: number
+  upstream_request_body_bytes?: number
+  response_content_bytes?: number
   response_body_bytes?: number
   error_message?: string
 }

@@ -22,9 +22,75 @@ const requestDetailSelectColumns = `
 	id, request_id, created_at, completed_at, duration_ms, status_code, success,
 	platform, endpoint, upstream_endpoint, model, upstream_model, stream,
 	user_id, api_key_id, account_id, group_id, subscription_id, ip_address, user_agent,
-	request_headers, %s AS request_body, %s AS upstream_request_body, response_headers, %s AS response_content, %s AS response_body,
+	request_headers, %s, response_headers, %s,
 	response_truncated, error_message,
-	COALESCE(octet_length(request_body), 0), COALESCE(octet_length(response_body), 0)
+	COALESCE(NULLIF(request_body_raw_bytes, 0), octet_length(request_body), 0),
+	COALESCE(NULLIF(upstream_request_body_raw_bytes, 0), octet_length(upstream_request_body), 0),
+	COALESCE(NULLIF(response_content_raw_bytes, 0), octet_length(response_content), 0),
+	COALESCE(NULLIF(response_body_raw_bytes, 0), octet_length(response_body), 0),
+	request_body_blob_id, request_body_sha256,
+	upstream_request_body_blob_id, upstream_request_body_sha256,
+	response_content_blob_id, response_content_sha256,
+	response_body_blob_id, response_body_sha256
+`
+
+const requestDetailRequestBodyListColumns = `
+	'' AS request_body,
+	''::bytea AS request_body_blob_content,
+	'' AS request_body_blob_codec,
+	0 AS request_body_blob_raw_size,
+	0 AS request_body_blob_compressed_size,
+	'' AS upstream_request_body,
+	''::bytea AS upstream_request_body_blob_content,
+	'' AS upstream_request_body_blob_codec,
+	0 AS upstream_request_body_blob_raw_size,
+	0 AS upstream_request_body_blob_compressed_size
+`
+
+const requestDetailResponseBodyListColumns = `
+	'' AS response_content,
+	''::bytea AS response_content_blob_content,
+	'' AS response_content_blob_codec,
+	0 AS response_content_blob_raw_size,
+	0 AS response_content_blob_compressed_size,
+	'' AS response_body,
+	''::bytea AS response_body_blob_content,
+	'' AS response_body_blob_codec,
+	0 AS response_body_blob_raw_size,
+	0 AS response_body_blob_compressed_size
+`
+
+const requestDetailRequestBodyFullColumns = `
+	request_details.request_body AS request_body,
+	COALESCE(rb.content, ''::bytea) AS request_body_blob_content,
+	COALESCE(rb.codec, '') AS request_body_blob_codec,
+	COALESCE(rb.raw_size_bytes, 0) AS request_body_blob_raw_size,
+	COALESCE(rb.compressed_size_bytes, 0) AS request_body_blob_compressed_size,
+	request_details.upstream_request_body AS upstream_request_body,
+	COALESCE(urb.content, ''::bytea) AS upstream_request_body_blob_content,
+	COALESCE(urb.codec, '') AS upstream_request_body_blob_codec,
+	COALESCE(urb.raw_size_bytes, 0) AS upstream_request_body_blob_raw_size,
+	COALESCE(urb.compressed_size_bytes, 0) AS upstream_request_body_blob_compressed_size
+`
+
+const requestDetailResponseBodyFullColumns = `
+	request_details.response_content AS response_content,
+	COALESCE(rcb.content, ''::bytea) AS response_content_blob_content,
+	COALESCE(rcb.codec, '') AS response_content_blob_codec,
+	COALESCE(rcb.raw_size_bytes, 0) AS response_content_blob_raw_size,
+	COALESCE(rcb.compressed_size_bytes, 0) AS response_content_blob_compressed_size,
+	request_details.response_body AS response_body,
+	COALESCE(rsb.content, ''::bytea) AS response_body_blob_content,
+	COALESCE(rsb.codec, '') AS response_body_blob_codec,
+	COALESCE(rsb.raw_size_bytes, 0) AS response_body_blob_raw_size,
+	COALESCE(rsb.compressed_size_bytes, 0) AS response_body_blob_compressed_size
+`
+
+const requestDetailBodyJoins = `
+	LEFT JOIN request_detail_body_blobs rb ON rb.id = request_details.request_body_blob_id
+	LEFT JOIN request_detail_body_blobs urb ON urb.id = request_details.upstream_request_body_blob_id
+	LEFT JOIN request_detail_body_blobs rcb ON rcb.id = request_details.response_content_blob_id
+	LEFT JOIN request_detail_body_blobs rsb ON rsb.id = request_details.response_body_blob_id
 `
 
 func NewRequestDetailRepository(client *dbent.Client, sqlDB *sql.DB) service.RequestDetailRepository {
@@ -38,7 +104,26 @@ func (r *requestDetailRepository) Create(ctx context.Context, detail *service.Re
 	if strings.TrimSpace(detail.RequestID) == "" {
 		return service.ErrRequestDetailRequestIDRequired
 	}
+	db, ok := r.sql.(*sql.DB)
+	if !ok {
+		return r.createWithExecutor(ctx, r.sql, detail)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if err := r.createWithExecutor(ctx, tx, detail); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return nil
+}
 
+func (r *requestDetailRepository) createWithExecutor(ctx context.Context, exec sqlExecutor, detail *service.RequestDetail) error {
 	requestHeaders, err := json.Marshal(nonNilHeaderMap(detail.RequestHeaders))
 	if err != nil {
 		return fmt.Errorf("marshal request headers: %w", err)
@@ -47,6 +132,10 @@ func (r *requestDetailRepository) Create(ctx context.Context, detail *service.Re
 	if err != nil {
 		return fmt.Errorf("marshal response headers: %w", err)
 	}
+	preparedBodies, err := prepareRequestDetailBodies(ctx, exec, detail)
+	if err != nil {
+		return err
+	}
 
 	query := `
 		INSERT INTO request_details (
@@ -54,13 +143,21 @@ func (r *requestDetailRepository) Create(ctx context.Context, detail *service.Re
 			platform, endpoint, upstream_endpoint, model, upstream_model, stream,
 			user_id, api_key_id, account_id, group_id, subscription_id,
 			ip_address, user_agent, request_headers, request_body, upstream_request_body,
-			response_headers, response_content, response_body, response_truncated, error_message
+			response_headers, response_content, response_body, response_truncated, error_message,
+			request_body_blob_id, request_body_sha256, request_body_raw_bytes,
+			upstream_request_body_blob_id, upstream_request_body_sha256, upstream_request_body_raw_bytes,
+			response_content_blob_id, response_content_sha256, response_content_raw_bytes,
+			response_body_blob_id, response_body_sha256, response_body_raw_bytes
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
 			$7, $8, $9, $10, $11, $12,
 			$13, $14, $15, $16, $17,
 			$18, $19, $20::jsonb, $21, $22,
-			$23::jsonb, $24, $25, $26, $27
+			$23::jsonb, $24, $25, $26, $27,
+			$28, $29, $30,
+			$31, $32, $33,
+			$34, $35, $36,
+			$37, $38, $39
 		)
 		ON CONFLICT (request_id) DO UPDATE SET
 			completed_at = EXCLUDED.completed_at,
@@ -87,13 +184,25 @@ func (r *requestDetailRepository) Create(ctx context.Context, detail *service.Re
 			response_content = EXCLUDED.response_content,
 			response_body = EXCLUDED.response_body,
 			response_truncated = EXCLUDED.response_truncated,
-			error_message = EXCLUDED.error_message
+			error_message = EXCLUDED.error_message,
+			request_body_blob_id = EXCLUDED.request_body_blob_id,
+			request_body_sha256 = EXCLUDED.request_body_sha256,
+			request_body_raw_bytes = EXCLUDED.request_body_raw_bytes,
+			upstream_request_body_blob_id = EXCLUDED.upstream_request_body_blob_id,
+			upstream_request_body_sha256 = EXCLUDED.upstream_request_body_sha256,
+			upstream_request_body_raw_bytes = EXCLUDED.upstream_request_body_raw_bytes,
+			response_content_blob_id = EXCLUDED.response_content_blob_id,
+			response_content_sha256 = EXCLUDED.response_content_sha256,
+			response_content_raw_bytes = EXCLUDED.response_content_raw_bytes,
+			response_body_blob_id = EXCLUDED.response_body_blob_id,
+			response_body_sha256 = EXCLUDED.response_body_sha256,
+			response_body_raw_bytes = EXCLUDED.response_body_raw_bytes
 		RETURNING id, created_at
 	`
 
 	err = scanSingleRow(
 		ctx,
-		r.sql,
+		exec,
 		query,
 		[]any{
 			detail.RequestID,
@@ -116,13 +225,25 @@ func (r *requestDetailRepository) Create(ctx context.Context, detail *service.Re
 			detail.IPAddress,
 			detail.UserAgent,
 			string(requestHeaders),
-			detail.RequestBody,
-			detail.UpstreamRequestBody,
+			preparedBodies.requestBody.inline,
+			preparedBodies.upstreamRequestBody.inline,
 			string(responseHeaders),
-			detail.ResponseContent,
-			detail.ResponseBody,
+			preparedBodies.responseContent.inline,
+			preparedBodies.responseBody.inline,
 			detail.ResponseTruncated,
 			detail.ErrorMessage,
+			nullableInt64Ptr(preparedBodies.requestBody.ref.BlobID),
+			preparedBodies.requestBody.ref.SHA256,
+			preparedBodies.requestBody.ref.RawSizeBytes,
+			nullableInt64Ptr(preparedBodies.upstreamRequestBody.ref.BlobID),
+			preparedBodies.upstreamRequestBody.ref.SHA256,
+			preparedBodies.upstreamRequestBody.ref.RawSizeBytes,
+			nullableInt64Ptr(preparedBodies.responseContent.ref.BlobID),
+			preparedBodies.responseContent.ref.SHA256,
+			preparedBodies.responseContent.ref.RawSizeBytes,
+			nullableInt64Ptr(preparedBodies.responseBody.ref.BlobID),
+			preparedBodies.responseBody.ref.SHA256,
+			preparedBodies.responseBody.ref.RawSizeBytes,
 		},
 		&detail.ID,
 		&detail.CreatedAt,
@@ -130,6 +251,14 @@ func (r *requestDetailRepository) Create(ctx context.Context, detail *service.Re
 	if err != nil {
 		return err
 	}
+	detail.RequestBodyRef = preparedBodies.requestBody.ref
+	detail.UpstreamRequestRef = preparedBodies.upstreamRequestBody.ref
+	detail.ResponseContentRef = preparedBodies.responseContent.ref
+	detail.ResponseBodyRef = preparedBodies.responseBody.ref
+	detail.RequestBodyBytes = preparedBodies.requestBody.ref.RawSizeBytes
+	detail.UpstreamRequestBodyBytes = preparedBodies.upstreamRequestBody.ref.RawSizeBytes
+	detail.ResponseContentBytes = preparedBodies.responseContent.ref.RawSizeBytes
+	detail.ResponseBodyBytes = preparedBodies.responseBody.ref.RawSizeBytes
 	return nil
 }
 
@@ -145,7 +274,7 @@ func (r *requestDetailRepository) List(ctx context.Context, params pagination.Pa
 
 	sortBy := normalizeRequestDetailSort(params.SortBy)
 	sortOrder := normalizeSortOrder(params.SortOrder)
-	selectColumns := fmt.Sprintf(requestDetailSelectColumns, "''", "''", "''", "''")
+	selectColumns := fmt.Sprintf(requestDetailSelectColumns, requestDetailRequestBodyListColumns, requestDetailResponseBodyListColumns)
 	query := fmt.Sprintf(`
 		SELECT %s
 		FROM request_details %s
@@ -168,10 +297,11 @@ func (r *requestDetailRepository) List(ctx context.Context, params pagination.Pa
 }
 
 func (r *requestDetailRepository) GetByID(ctx context.Context, id int64) (*service.RequestDetail, error) {
-	selectColumns := fmt.Sprintf(requestDetailSelectColumns, "request_body", "upstream_request_body", "response_content", "response_body")
+	selectColumns := fmt.Sprintf(requestDetailSelectColumns, requestDetailRequestBodyFullColumns, requestDetailResponseBodyFullColumns)
 	query := `
 		SELECT ` + selectColumns + `
 		FROM request_details
+		` + requestDetailBodyJoins + `
 		WHERE id = $1`
 
 	rows, err := r.sql.QueryContext(ctx, query, id)
@@ -200,10 +330,12 @@ func (r *requestDetailRepository) GetByID(ctx context.Context, id int64) (*servi
 
 func (r *requestDetailRepository) StreamAll(ctx context.Context, filters service.RequestDetailFilters, write func(service.RequestDetail) error) error {
 	where, args := buildRequestDetailWhere(filters)
-	selectColumns := fmt.Sprintf(requestDetailSelectColumns, "request_body", "upstream_request_body", "response_content", "response_body")
+	selectColumns := fmt.Sprintf(requestDetailSelectColumns, requestDetailRequestBodyFullColumns, requestDetailResponseBodyFullColumns)
 	query := `
 		SELECT ` + selectColumns + `
-		FROM request_details ` + where + `
+		FROM request_details
+		` + requestDetailBodyJoins + `
+		` + where + `
 		ORDER BY COALESCE(completed_at, created_at) ASC, id ASC
 	`
 	rows, err := r.sql.QueryContext(ctx, query, args...)
@@ -235,11 +367,25 @@ func (r *requestDetailRepository) DeleteBefore(ctx context.Context, before time.
 	}
 	query := `
 		WITH victims AS (
-			SELECT request_id
+			SELECT request_id, request_body_blob_id, upstream_request_body_blob_id,
+				response_content_blob_id, response_body_blob_id
 			FROM request_details
 			WHERE COALESCE(completed_at, created_at) < $1
 			ORDER BY COALESCE(completed_at, created_at) ASC, id ASC
 			LIMIT $2
+		),
+		victim_blobs AS (
+			SELECT DISTINCT blob_id
+			FROM (
+				SELECT request_body_blob_id AS blob_id FROM victims
+				UNION ALL
+				SELECT upstream_request_body_blob_id AS blob_id FROM victims
+				UNION ALL
+				SELECT response_content_blob_id AS blob_id FROM victims
+				UNION ALL
+				SELECT response_body_blob_id AS blob_id FROM victims
+			) ids
+			WHERE blob_id IS NOT NULL
 		),
 		deleted_artifacts AS (
 			DELETE FROM request_detail_image_artifacts
@@ -249,6 +395,21 @@ func (r *requestDetailRepository) DeleteBefore(ctx context.Context, before time.
 			DELETE FROM request_details
 			WHERE request_id IN (SELECT request_id FROM victims)
 			RETURNING 1
+		),
+		cleanup_blobs AS (
+			DELETE FROM request_detail_body_blobs b
+			WHERE b.id IN (SELECT blob_id FROM victim_blobs)
+			  AND NOT EXISTS (
+				SELECT 1
+				FROM request_details d
+				WHERE (
+					d.request_body_blob_id = b.id
+					OR d.upstream_request_body_blob_id = b.id
+					OR d.response_content_blob_id = b.id
+					OR d.response_body_blob_id = b.id
+				)
+				AND d.request_id NOT IN (SELECT request_id FROM victims)
+			)
 		)
 		SELECT COUNT(*) FROM deleted_details
 	`
@@ -257,6 +418,127 @@ func (r *requestDetailRepository) DeleteBefore(ctx context.Context, before time.
 		return 0, err
 	}
 	return deleted, nil
+}
+
+func (r *requestDetailRepository) MigrateLegacyBodies(ctx context.Context, limit int) (int64, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	db, ok := r.sql.(*sql.DB)
+	if !ok {
+		return r.migrateLegacyBodiesWithExecutor(ctx, r.sql, limit)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	migrated, err := r.migrateLegacyBodiesWithExecutor(ctx, tx, limit)
+	if err != nil {
+		_ = tx.Rollback()
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return 0, err
+	}
+	return migrated, nil
+}
+
+func (r *requestDetailRepository) migrateLegacyBodiesWithExecutor(ctx context.Context, exec sqlExecutor, limit int) (int64, error) {
+	rows, err := exec.QueryContext(ctx, `
+		SELECT id, request_body, upstream_request_body, response_content, response_body
+		FROM request_details
+		WHERE (request_body_blob_id IS NULL AND octet_length(request_body) >= $1)
+		   OR (upstream_request_body_blob_id IS NULL AND octet_length(upstream_request_body) >= $1)
+		   OR (response_content_blob_id IS NULL AND octet_length(response_content) >= $1)
+		   OR (response_body_blob_id IS NULL AND octet_length(response_body) >= $1)
+		ORDER BY id ASC
+		LIMIT $2
+		FOR UPDATE SKIP LOCKED
+	`, service.RequestDetailBodyCompressionMinSize, limit)
+	if err != nil {
+		return 0, err
+	}
+
+	type legacyRow struct {
+		id                  int64
+		requestBody         string
+		upstreamRequestBody string
+		responseContent     string
+		responseBody        string
+	}
+	var items []legacyRow
+	for rows.Next() {
+		var item legacyRow
+		if err := rows.Scan(&item.id, &item.requestBody, &item.upstreamRequestBody, &item.responseContent, &item.responseBody); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+
+	var migrated int64
+	for _, item := range items {
+		detail := &service.RequestDetail{
+			RequestBody:         item.requestBody,
+			UpstreamRequestBody: item.upstreamRequestBody,
+			ResponseContent:     item.responseContent,
+			ResponseBody:        item.responseBody,
+		}
+		prepared, err := prepareRequestDetailBodies(ctx, exec, detail)
+		if err != nil {
+			return migrated, err
+		}
+		if _, err := exec.ExecContext(ctx, `
+			UPDATE request_details SET
+				request_body = $2,
+				request_body_blob_id = $3,
+				request_body_sha256 = $4,
+				request_body_raw_bytes = $5,
+				upstream_request_body = $6,
+				upstream_request_body_blob_id = $7,
+				upstream_request_body_sha256 = $8,
+				upstream_request_body_raw_bytes = $9,
+				response_content = $10,
+				response_content_blob_id = $11,
+				response_content_sha256 = $12,
+				response_content_raw_bytes = $13,
+				response_body = $14,
+				response_body_blob_id = $15,
+				response_body_sha256 = $16,
+				response_body_raw_bytes = $17
+			WHERE id = $1
+		`,
+			item.id,
+			prepared.requestBody.inline,
+			nullableInt64Ptr(prepared.requestBody.ref.BlobID),
+			prepared.requestBody.ref.SHA256,
+			prepared.requestBody.ref.RawSizeBytes,
+			prepared.upstreamRequestBody.inline,
+			nullableInt64Ptr(prepared.upstreamRequestBody.ref.BlobID),
+			prepared.upstreamRequestBody.ref.SHA256,
+			prepared.upstreamRequestBody.ref.RawSizeBytes,
+			prepared.responseContent.inline,
+			nullableInt64Ptr(prepared.responseContent.ref.BlobID),
+			prepared.responseContent.ref.SHA256,
+			prepared.responseContent.ref.RawSizeBytes,
+			prepared.responseBody.inline,
+			nullableInt64Ptr(prepared.responseBody.ref.BlobID),
+			prepared.responseBody.ref.SHA256,
+			prepared.responseBody.ref.RawSizeBytes,
+		); err != nil {
+			return migrated, err
+		}
+		migrated++
+	}
+	return migrated, nil
 }
 
 func (r *requestDetailRepository) CreateImageArtifacts(ctx context.Context, artifacts []service.RequestDetailImageArtifact) error {
@@ -384,6 +666,88 @@ type requestDetailImageArtifactScanner interface {
 	Scan(dest ...any) error
 }
 
+type preparedRequestDetailBody struct {
+	inline string
+	ref    service.RequestDetailBodyRef
+}
+
+type preparedRequestDetailBodies struct {
+	requestBody         preparedRequestDetailBody
+	upstreamRequestBody preparedRequestDetailBody
+	responseContent     preparedRequestDetailBody
+	responseBody        preparedRequestDetailBody
+}
+
+func prepareRequestDetailBodies(ctx context.Context, exec sqlExecutor, detail *service.RequestDetail) (*preparedRequestDetailBodies, error) {
+	cache := map[string]service.RequestDetailBodyRef{}
+	prepare := func(raw string) (preparedRequestDetailBody, error) {
+		ref := service.RequestDetailBodyRef{RawSizeBytes: len([]byte(raw))}
+		if raw == "" || len([]byte(raw)) < service.RequestDetailBodyCompressionMinSize {
+			return preparedRequestDetailBody{inline: raw, ref: ref}, nil
+		}
+		built, err := service.BuildRequestDetailBodyBlob(raw)
+		if err != nil {
+			return preparedRequestDetailBody{}, err
+		}
+		cacheKey := built.SHA256 + ":" + fmt.Sprintf("%d", built.RawSizeBytes) + ":" + built.Codec
+		if cached, ok := cache[cacheKey]; ok {
+			return preparedRequestDetailBody{ref: cached}, nil
+		}
+		blobID, err := upsertRequestDetailBodyBlob(ctx, exec, *built)
+		if err != nil {
+			return preparedRequestDetailBody{}, err
+		}
+		built.BlobID = &blobID
+		built.Content = nil
+		cache[cacheKey] = *built
+		return preparedRequestDetailBody{ref: *built}, nil
+	}
+
+	requestBody, err := prepare(detail.RequestBody)
+	if err != nil {
+		return nil, fmt.Errorf("prepare request body: %w", err)
+	}
+	upstreamRequestBody, err := prepare(detail.UpstreamRequestBody)
+	if err != nil {
+		return nil, fmt.Errorf("prepare upstream request body: %w", err)
+	}
+	responseContent, err := prepare(detail.ResponseContent)
+	if err != nil {
+		return nil, fmt.Errorf("prepare response content: %w", err)
+	}
+	responseBody, err := prepare(detail.ResponseBody)
+	if err != nil {
+		return nil, fmt.Errorf("prepare response body: %w", err)
+	}
+	return &preparedRequestDetailBodies{
+		requestBody:         requestBody,
+		upstreamRequestBody: upstreamRequestBody,
+		responseContent:     responseContent,
+		responseBody:        responseBody,
+	}, nil
+}
+
+func upsertRequestDetailBodyBlob(ctx context.Context, exec sqlExecutor, ref service.RequestDetailBodyRef) (int64, error) {
+	var id int64
+	query := `
+		INSERT INTO request_detail_body_blobs (sha256, codec, raw_size_bytes, compressed_size_bytes, content)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (sha256, raw_size_bytes, codec) DO UPDATE SET
+			compressed_size_bytes = request_detail_body_blobs.compressed_size_bytes
+		RETURNING id
+	`
+	if err := scanSingleRow(ctx, exec, query, []any{
+		ref.SHA256,
+		ref.Codec,
+		ref.RawSizeBytes,
+		ref.CompressedSizeBytes,
+		ref.Content,
+	}, &id); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 func scanRequestDetailRows(rows *sql.Rows) ([]service.RequestDetail, error) {
 	items := make([]service.RequestDetail, 0)
 	for rows.Next() {
@@ -455,23 +819,37 @@ func scanRequestDetailImageArtifact(scanner requestDetailImageArtifactScanner) (
 
 func scanRequestDetail(scanner requestDetailScanner) (*service.RequestDetail, error) {
 	var (
-		detail              service.RequestDetail
-		completedAt         sql.NullTime
-		durationMS          sql.NullInt64
-		userID              sql.NullInt64
-		apiKeyID            sql.NullInt64
-		accountID           sql.NullInt64
-		groupID             sql.NullInt64
-		subscriptionID      sql.NullInt64
-		requestHeadersRaw   []byte
-		requestBody         string
-		upstreamRequestBody string
-		responseHeadersRaw  []byte
-		responseContent     string
-		responseBody        string
-		requestBodyBytes    int
-		responseBodyBytes   int
+		detail                    service.RequestDetail
+		completedAt               sql.NullTime
+		durationMS                sql.NullInt64
+		userID                    sql.NullInt64
+		apiKeyID                  sql.NullInt64
+		accountID                 sql.NullInt64
+		groupID                   sql.NullInt64
+		subscriptionID            sql.NullInt64
+		requestHeadersRaw         []byte
+		requestBody               string
+		upstreamRequestBody       string
+		responseHeadersRaw        []byte
+		responseContent           string
+		responseBody              string
+		requestBodyBytes          int
+		upstreamRequestBodyBytes  int
+		responseContentBytes      int
+		responseBodyBytes         int
+		requestBodyBlobID         sql.NullInt64
+		requestBodySHA            string
+		upstreamRequestBodyBlobID sql.NullInt64
+		upstreamRequestBodySHA    string
+		responseContentBlobID     sql.NullInt64
+		responseContentSHA        string
+		responseBodyBlobID        sql.NullInt64
+		responseBodySHA           string
 	)
+	requestBlob := requestDetailScannedBody{}
+	upstreamBlob := requestDetailScannedBody{}
+	responseContentBlob := requestDetailScannedBody{}
+	responseBlob := requestDetailScannedBody{}
 
 	if err := scanner.Scan(
 		&detail.ID,
@@ -496,14 +874,40 @@ func scanRequestDetail(scanner requestDetailScanner) (*service.RequestDetail, er
 		&detail.UserAgent,
 		&requestHeadersRaw,
 		&requestBody,
+		&requestBlob.content,
+		&requestBlob.codec,
+		&requestBlob.rawSize,
+		&requestBlob.compressedSize,
 		&upstreamRequestBody,
+		&upstreamBlob.content,
+		&upstreamBlob.codec,
+		&upstreamBlob.rawSize,
+		&upstreamBlob.compressedSize,
 		&responseHeadersRaw,
 		&responseContent,
+		&responseContentBlob.content,
+		&responseContentBlob.codec,
+		&responseContentBlob.rawSize,
+		&responseContentBlob.compressedSize,
 		&responseBody,
+		&responseBlob.content,
+		&responseBlob.codec,
+		&responseBlob.rawSize,
+		&responseBlob.compressedSize,
 		&detail.ResponseTruncated,
 		&detail.ErrorMessage,
 		&requestBodyBytes,
+		&upstreamRequestBodyBytes,
+		&responseContentBytes,
 		&responseBodyBytes,
+		&requestBodyBlobID,
+		&requestBodySHA,
+		&upstreamRequestBodyBlobID,
+		&upstreamRequestBodySHA,
+		&responseContentBlobID,
+		&responseContentSHA,
+		&responseBodyBlobID,
+		&responseBodySHA,
 	); err != nil {
 		return nil, err
 	}
@@ -544,10 +948,23 @@ func scanRequestDetail(scanner requestDetailScanner) (*service.RequestDetail, er
 			return nil, fmt.Errorf("unmarshal response headers: %w", err)
 		}
 	}
-	detail.RequestBody = requestBody
-	detail.UpstreamRequestBody = upstreamRequestBody
-	detail.ResponseContent = responseContent
-	detail.ResponseBody = responseBody
+	detail.RequestBodyRef = buildScannedBodyRef(requestBodyBlobID, requestBodySHA, requestBodyBytes, requestBlob)
+	detail.UpstreamRequestRef = buildScannedBodyRef(upstreamRequestBodyBlobID, upstreamRequestBodySHA, upstreamRequestBodyBytes, upstreamBlob)
+	detail.ResponseContentRef = buildScannedBodyRef(responseContentBlobID, responseContentSHA, responseContentBytes, responseContentBlob)
+	detail.ResponseBodyRef = buildScannedBodyRef(responseBodyBlobID, responseBodySHA, responseBodyBytes, responseBlob)
+	var err error
+	if detail.RequestBody, err = decodeScannedBody(requestBody, detail.RequestBodyRef); err != nil {
+		return nil, fmt.Errorf("decode request body: %w", err)
+	}
+	if detail.UpstreamRequestBody, err = decodeScannedBody(upstreamRequestBody, detail.UpstreamRequestRef); err != nil {
+		return nil, fmt.Errorf("decode upstream request body: %w", err)
+	}
+	if detail.ResponseContent, err = decodeScannedBody(responseContent, detail.ResponseContentRef); err != nil {
+		return nil, fmt.Errorf("decode response content: %w", err)
+	}
+	if detail.ResponseBody, err = decodeScannedBody(responseBody, detail.ResponseBodyRef); err != nil {
+		return nil, fmt.Errorf("decode response body: %w", err)
+	}
 	if detail.ResponseContent == "" && detail.ResponseBody != "" {
 		detail.ResponseContent = service.ExtractRequestDetailResponseContent(
 			service.RequestDetailContext{
@@ -557,8 +974,42 @@ func scanRequestDetail(scanner requestDetailScanner) (*service.RequestDetail, er
 		)
 	}
 	detail.RequestBodyBytes = requestBodyBytes
+	detail.UpstreamRequestBodyBytes = upstreamRequestBodyBytes
+	detail.ResponseContentBytes = responseContentBytes
 	detail.ResponseBodyBytes = responseBodyBytes
 	return &detail, nil
+}
+
+type requestDetailScannedBody struct {
+	content        []byte
+	codec          string
+	rawSize        int
+	compressedSize int
+}
+
+func buildScannedBodyRef(blobID sql.NullInt64, sha string, fallbackRawSize int, body requestDetailScannedBody) service.RequestDetailBodyRef {
+	ref := service.RequestDetailBodyRef{
+		SHA256:              sha,
+		RawSizeBytes:        fallbackRawSize,
+		CompressedSizeBytes: body.compressedSize,
+		Codec:               body.codec,
+		Content:             body.content,
+	}
+	if body.rawSize > 0 {
+		ref.RawSizeBytes = body.rawSize
+	}
+	if blobID.Valid {
+		v := blobID.Int64
+		ref.BlobID = &v
+	}
+	return ref
+}
+
+func decodeScannedBody(inline string, ref service.RequestDetailBodyRef) (string, error) {
+	if len(ref.Content) == 0 {
+		return inline, nil
+	}
+	return service.DecodeRequestDetailBodyBlob(ref)
 }
 
 func buildRequestDetailWhere(filters service.RequestDetailFilters) (string, []any) {
@@ -642,6 +1093,13 @@ func nullableInt64Value(value int64) any {
 		return nil
 	}
 	return value
+}
+
+func nullableInt64Ptr(value *int64) any {
+	if value == nil || *value == 0 {
+		return nil
+	}
+	return *value
 }
 
 func nonNilHeaderMap(value map[string][]string) map[string][]string {

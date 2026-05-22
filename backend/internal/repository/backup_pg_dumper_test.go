@@ -18,6 +18,8 @@ func TestBuildPgDumpArgsExcludesRequestDetailTables(t *testing.T) {
 
 	require.Contains(t, args, "--exclude-table=request_details")
 	require.Contains(t, args, "--exclude-table-data=request_details")
+	require.Contains(t, args, "--exclude-table=request_detail_body_blobs")
+	require.Contains(t, args, "--exclude-table-data=request_detail_body_blobs")
 	require.Contains(t, args, "--exclude-table=request_detail_image_artifacts")
 	require.Contains(t, args, "--exclude-table-data=request_detail_image_artifacts")
 }

@@ -116,11 +116,16 @@ func (e requestDetailBackupPlainEncryptor) Decrypt(ciphertext string) (string, e
 }
 
 func TestRequestDetailBackupWritesGzipNDJSON(t *testing.T) {
+	ref, err := BuildRequestDetailBodyBlob(strings.Repeat("large-body-", 1024))
+	require.NoError(t, err)
 	repo := &requestDetailBackupRepoStub{items: []RequestDetail{{
-		RequestID:    "req-backup",
-		CreatedAt:    time.Now(),
-		RequestBody:  `{"a":1}`,
-		ResponseBody: `{"b":2}`,
+		RequestID:           "req-backup",
+		CreatedAt:           time.Now(),
+		RequestBody:         strings.Repeat("large-body-", 1024),
+		UpstreamRequestBody: strings.Repeat("large-body-", 1024),
+		RequestBodyRef:      *ref,
+		UpstreamRequestRef:  *ref,
+		ResponseBody:        `{"b":2}`,
 	}}}
 	svc := NewRequestDetailService(repo)
 
@@ -133,8 +138,70 @@ func TestRequestDetailBackupWritesGzipNDJSON(t *testing.T) {
 	require.NoError(t, err)
 	out, err := io.ReadAll(reader)
 	require.NoError(t, err)
-	require.Contains(t, string(out), `"request_id":"req-backup"`)
+	body := string(out)
+	require.Contains(t, body, `"type":"body_blob"`)
+	require.Contains(t, body, `"type":"request_detail"`)
+	require.Contains(t, body, `"request_id":"req-backup"`)
+	require.Equal(t, 1, strings.Count(body, `"type":"body_blob"`))
 	require.True(t, strings.HasSuffix(string(out), "\n"))
+}
+
+func TestRequestDetailBackupCompressesLegacyInlineLargeBodies(t *testing.T) {
+	largeBody := strings.Repeat("legacy-large-body-", 1024)
+	repo := &requestDetailBackupRepoStub{items: []RequestDetail{{
+		RequestID:           "req-legacy-backup",
+		CreatedAt:           time.Now(),
+		RequestBody:         largeBody,
+		UpstreamRequestBody: largeBody,
+	}}}
+	svc := NewRequestDetailService(repo)
+
+	var buf bytes.Buffer
+	require.NoError(t, svc.WriteBackupNDJSON(context.Background(), RequestDetailFilters{}, &buf))
+	body := buf.String()
+	require.Equal(t, 1, strings.Count(body, `"type":"body_blob"`))
+	require.Contains(t, body, `"type":"request_detail"`)
+	require.Contains(t, body, `"request_id":"req-legacy-backup"`)
+	require.NotContains(t, body, largeBody)
+	require.NotContains(t, body, `"inline":"legacy-large-body-`)
+}
+
+func TestRequestDetailBackupUploadUsesV2ArchiveFormat(t *testing.T) {
+	largeBody := strings.Repeat("upload-large-body-", 1024)
+	blockCh := make(chan struct{})
+	repo := &requestDetailBackupBlockingRepoStub{
+		blockCh: blockCh,
+		items: []RequestDetail{{
+			RequestID:           "req-upload-archive",
+			CreatedAt:           time.Now(),
+			RequestBody:         largeBody,
+			UpstreamRequestBody: largeBody,
+		}},
+	}
+	store := newRequestDetailBackupStoreStub()
+	svc := newRequestDetailBackupTestService(repo, store, nil)
+
+	record, err := svc.StartBackup(context.Background(), "manual")
+	require.NoError(t, err)
+
+	close(blockCh)
+	require.Eventually(t, func() bool {
+		final, err := svc.GetBackupRecord(context.Background(), record.ID)
+		return err == nil && final.Status == "completed" && len(final.Parts) == 1
+	}, time.Second, 10*time.Millisecond)
+
+	final, err := svc.GetBackupRecord(context.Background(), record.ID)
+	require.NoError(t, err)
+	data := store.objects[final.Parts[0].S3Key]
+	reader, err := gzip.NewReader(bytes.NewReader(data))
+	require.NoError(t, err)
+	out, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.NoError(t, reader.Close())
+	body := string(out)
+	require.Equal(t, 1, strings.Count(body, `"type":"body_blob"`))
+	require.Contains(t, body, `"type":"request_detail"`)
+	require.NotContains(t, body, largeBody)
 }
 
 type requestDetailBackupBlockingRepoStub struct {

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"strings"
 	"sync/atomic"
@@ -17,37 +16,43 @@ var ErrRequestDetailNotFound = infraerrors.NotFound("REQUEST_DETAIL_NOT_FOUND", 
 var ErrRequestDetailRequestIDRequired = infraerrors.BadRequest("REQUEST_DETAIL_REQUEST_ID_REQUIRED", "request_id is required")
 
 type RequestDetail struct {
-	ID                  int64                        `json:"id"`
-	RequestID           string                       `json:"request_id"`
-	CreatedAt           time.Time                    `json:"created_at"`
-	CompletedAt         *time.Time                   `json:"completed_at,omitempty"`
-	DurationMS          *int                         `json:"duration_ms,omitempty"`
-	StatusCode          int                          `json:"status_code"`
-	Success             bool                         `json:"success"`
-	Platform            string                       `json:"platform"`
-	Endpoint            string                       `json:"endpoint"`
-	UpstreamEndpoint    string                       `json:"upstream_endpoint"`
-	Model               string                       `json:"model"`
-	UpstreamModel       string                       `json:"upstream_model"`
-	Stream              bool                         `json:"stream"`
-	UserID              int64                        `json:"user_id,omitempty"`
-	APIKeyID            int64                        `json:"api_key_id,omitempty"`
-	AccountID           int64                        `json:"account_id,omitempty"`
-	GroupID             *int64                       `json:"group_id,omitempty"`
-	SubscriptionID      *int64                       `json:"subscription_id,omitempty"`
-	IPAddress           string                       `json:"ip_address"`
-	UserAgent           string                       `json:"user_agent"`
-	RequestHeaders      map[string][]string          `json:"request_headers,omitempty"`
-	RequestBody         string                       `json:"request_body,omitempty"`
-	UpstreamRequestBody string                       `json:"upstream_request_body,omitempty"`
-	ResponseHeaders     map[string][]string          `json:"response_headers,omitempty"`
-	ResponseContent     string                       `json:"response_content,omitempty"`
-	ResponseBody        string                       `json:"response_body,omitempty"`
-	ResponseTruncated   bool                         `json:"response_truncated"`
-	ErrorMessage        string                       `json:"error_message,omitempty"`
-	RequestBodyBytes    int                          `json:"request_body_bytes,omitempty"`
-	ResponseBodyBytes   int                          `json:"response_body_bytes,omitempty"`
-	ImageArtifacts      []RequestDetailImageArtifact `json:"image_artifacts,omitempty"`
+	ID                       int64                        `json:"id"`
+	RequestID                string                       `json:"request_id"`
+	CreatedAt                time.Time                    `json:"created_at"`
+	CompletedAt              *time.Time                   `json:"completed_at,omitempty"`
+	DurationMS               *int                         `json:"duration_ms,omitempty"`
+	StatusCode               int                          `json:"status_code"`
+	Success                  bool                         `json:"success"`
+	Platform                 string                       `json:"platform"`
+	Endpoint                 string                       `json:"endpoint"`
+	UpstreamEndpoint         string                       `json:"upstream_endpoint"`
+	Model                    string                       `json:"model"`
+	UpstreamModel            string                       `json:"upstream_model"`
+	Stream                   bool                         `json:"stream"`
+	UserID                   int64                        `json:"user_id,omitempty"`
+	APIKeyID                 int64                        `json:"api_key_id,omitempty"`
+	AccountID                int64                        `json:"account_id,omitempty"`
+	GroupID                  *int64                       `json:"group_id,omitempty"`
+	SubscriptionID           *int64                       `json:"subscription_id,omitempty"`
+	IPAddress                string                       `json:"ip_address"`
+	UserAgent                string                       `json:"user_agent"`
+	RequestHeaders           map[string][]string          `json:"request_headers,omitempty"`
+	RequestBody              string                       `json:"request_body,omitempty"`
+	UpstreamRequestBody      string                       `json:"upstream_request_body,omitempty"`
+	ResponseHeaders          map[string][]string          `json:"response_headers,omitempty"`
+	ResponseContent          string                       `json:"response_content,omitempty"`
+	ResponseBody             string                       `json:"response_body,omitempty"`
+	RequestBodyRef           RequestDetailBodyRef         `json:"-"`
+	UpstreamRequestRef       RequestDetailBodyRef         `json:"-"`
+	ResponseContentRef       RequestDetailBodyRef         `json:"-"`
+	ResponseBodyRef          RequestDetailBodyRef         `json:"-"`
+	ResponseTruncated        bool                         `json:"response_truncated"`
+	ErrorMessage             string                       `json:"error_message,omitempty"`
+	RequestBodyBytes         int                          `json:"request_body_bytes,omitempty"`
+	UpstreamRequestBodyBytes int                          `json:"upstream_request_body_bytes,omitempty"`
+	ResponseContentBytes     int                          `json:"response_content_bytes,omitempty"`
+	ResponseBodyBytes        int                          `json:"response_body_bytes,omitempty"`
+	ImageArtifacts           []RequestDetailImageArtifact `json:"image_artifacts,omitempty"`
 }
 
 type RequestDetailImageArtifact struct {
@@ -103,6 +108,10 @@ type RequestDetailCleanupRepository interface {
 	DeleteBefore(ctx context.Context, before time.Time, limit int) (int64, error)
 }
 
+type RequestDetailBodyMigrationRepository interface {
+	MigrateLegacyBodies(ctx context.Context, limit int) (int64, error)
+}
+
 type RequestDetailRetentionConfig struct {
 	RetentionDays    int
 	CleanupInterval  time.Duration
@@ -110,15 +119,16 @@ type RequestDetailRetentionConfig struct {
 }
 
 type RequestDetailService struct {
-	repo          RequestDetailRepository
-	backupService *BackupService
-	queue         chan *RequestDetail
-	stopCh        chan struct{}
-	doneCh        chan struct{}
-	cleanupDoneCh chan struct{}
-	retention     RequestDetailRetentionConfig
-	started       atomic.Bool
-	stopped       atomic.Bool
+	repo            RequestDetailRepository
+	backupService   *BackupService
+	queue           chan *RequestDetail
+	stopCh          chan struct{}
+	doneCh          chan struct{}
+	cleanupDoneCh   chan struct{}
+	migrationDoneCh chan struct{}
+	retention       RequestDetailRetentionConfig
+	started         atomic.Bool
+	stopped         atomic.Bool
 }
 
 func NewRequestDetailService(repo RequestDetailRepository, retentionConfig ...RequestDetailRetentionConfig) *RequestDetailService {
@@ -162,6 +172,7 @@ func (s *RequestDetailService) Start() {
 	s.stopped.Store(false)
 	go s.run()
 	s.startCleanup()
+	s.startLegacyBodyMigration()
 }
 
 func (s *RequestDetailService) Stop() {
@@ -173,6 +184,9 @@ func (s *RequestDetailService) Stop() {
 	<-s.doneCh
 	if s.cleanupDoneCh != nil {
 		<-s.cleanupDoneCh
+	}
+	if s.migrationDoneCh != nil {
+		<-s.migrationDoneCh
 	}
 }
 
@@ -232,9 +246,9 @@ func (s *RequestDetailService) StreamAll(ctx context.Context, filters RequestDet
 }
 
 func (s *RequestDetailService) WriteBackupNDJSON(ctx context.Context, filters RequestDetailFilters, w io.Writer) error {
-	enc := json.NewEncoder(w)
+	writer := NewRequestDetailBackupArchiveWriter(w)
 	return s.repo.StreamAll(ctx, filters, func(detail RequestDetail) error {
-		return enc.Encode(detail)
+		return writer.WriteDetail(detail)
 	})
 }
 
@@ -248,6 +262,51 @@ func (s *RequestDetailService) startCleanup() {
 	}
 	s.cleanupDoneCh = make(chan struct{})
 	go s.runCleanup()
+}
+
+func (s *RequestDetailService) startLegacyBodyMigration() {
+	if s == nil {
+		return
+	}
+	if _, ok := s.repo.(RequestDetailBodyMigrationRepository); !ok {
+		return
+	}
+	s.migrationDoneCh = make(chan struct{})
+	go s.runLegacyBodyMigration()
+}
+
+func (s *RequestDetailService) runLegacyBodyMigration() {
+	defer close(s.migrationDoneCh)
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		s.migrateLegacyBodiesOnce()
+		select {
+		case <-ticker.C:
+		case <-s.stopCh:
+			return
+		}
+	}
+}
+
+func (s *RequestDetailService) migrateLegacyBodiesOnce() {
+	if s == nil {
+		return
+	}
+	repo, ok := s.repo.(RequestDetailBodyMigrationRepository)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	migrated, err := repo.MigrateLegacyBodies(ctx, 100)
+	cancel()
+	if err != nil {
+		logger.LegacyPrintf("service.request_detail", "migrate legacy request detail bodies failed err=%v", err)
+		return
+	}
+	if migrated > 0 {
+		logger.LegacyPrintf("service.request_detail", "migrated legacy request detail bodies count=%d", migrated)
+	}
 }
 
 func (s *RequestDetailService) runCleanup() {

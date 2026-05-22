@@ -16,6 +16,8 @@ type requestDetailRepoStub struct {
 	deletedBefore []time.Time
 	deleteLimit   []int
 	deleteCount   int64
+	migrateLimit  []int
+	migrateCounts []int64
 }
 
 func (s *requestDetailRepoStub) Create(_ context.Context, detail *RequestDetail) error {
@@ -57,6 +59,18 @@ func (s *requestDetailRepoStub) DeleteBefore(_ context.Context, before time.Time
 	deleted := s.deleteCount
 	s.deleteCount = 0
 	return deleted, nil
+}
+
+func (s *requestDetailRepoStub) MigrateLegacyBodies(_ context.Context, limit int) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.migrateLimit = append(s.migrateLimit, limit)
+	if len(s.migrateCounts) == 0 {
+		return 0, nil
+	}
+	migrated := s.migrateCounts[0]
+	s.migrateCounts = s.migrateCounts[1:]
+	return migrated, nil
 }
 
 func TestRequestDetailServiceCreateAsyncFlushesOnStop(t *testing.T) {
@@ -105,4 +119,16 @@ func TestRequestDetailServiceCleansExpiredDetailsOnStart(t *testing.T) {
 	require.Len(t, repo.deleteLimit, 1)
 	require.Equal(t, 123, repo.deleteLimit[0])
 	require.WithinDuration(t, startedAt.AddDate(0, 0, -7), repo.deletedBefore[0], 2*time.Second)
+}
+
+func TestRequestDetailServiceMigratesOneLegacyBodyBatchPerTick(t *testing.T) {
+	repo := &requestDetailRepoStub{migrateCounts: []int64{100, 100}}
+	svc := NewRequestDetailService(repo)
+
+	svc.migrateLegacyBodiesOnce()
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	require.Equal(t, []int{100}, repo.migrateLimit)
+	require.Equal(t, []int64{100}, repo.migrateCounts)
 }
