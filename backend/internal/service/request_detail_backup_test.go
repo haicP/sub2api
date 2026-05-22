@@ -325,6 +325,46 @@ func TestRequestDetailBackupScheduledBackupUsesPreviousDayFilter(t *testing.T) {
 	require.Equal(t, expectedEnd, *repo.filters[0].EndTime)
 }
 
+func TestRequestDetailBackupRecoverStaleRecords(t *testing.T) {
+	fixedNow := time.Date(2026, 5, 22, 9, 30, 0, 0, time.Local)
+	originalNow := requestDetailBackupNow
+	requestDetailBackupNow = func() time.Time { return fixedNow }
+	t.Cleanup(func() { requestDetailBackupNow = originalNow })
+
+	settings := newRequestDetailBackupSettingRepoStub()
+	svc := NewRequestDetailBackupService(nil, nil, settings)
+	require.NoError(t, svc.saveRecord(context.Background(), &BackupRecord{
+		ID:          "stale-1",
+		Status:      "running",
+		BackupType:  "request_details",
+		Progress:    "uploading",
+		StartedAt:   fixedNow.Add(-time.Hour).Format(time.RFC3339),
+		TriggeredBy: "manual",
+	}))
+	require.NoError(t, svc.saveRecord(context.Background(), &BackupRecord{
+		ID:          "done-1",
+		Status:      "completed",
+		BackupType:  "request_details",
+		StartedAt:   fixedNow.Add(-2 * time.Hour).Format(time.RFC3339),
+		FinishedAt:  fixedNow.Add(-time.Hour).Format(time.RFC3339),
+		TriggeredBy: "manual",
+	}))
+
+	svc.recoverStaleRecords(context.Background())
+
+	stale, err := svc.GetBackupRecord(context.Background(), "stale-1")
+	require.NoError(t, err)
+	require.Equal(t, "failed", stale.Status)
+	require.Empty(t, stale.Progress)
+	require.Equal(t, fixedNow.Format(time.RFC3339), stale.FinishedAt)
+	require.Contains(t, stale.ErrorMsg, "server restart")
+
+	done, err := svc.GetBackupRecord(context.Background(), "done-1")
+	require.NoError(t, err)
+	require.Equal(t, "completed", done.Status)
+	require.Empty(t, done.ErrorMsg)
+}
+
 func TestRequestDetailBackupStartBackupUploadFailureIsRecordedAsync(t *testing.T) {
 	blockCh := make(chan struct{})
 	repo := &requestDetailBackupBlockingRepoStub{

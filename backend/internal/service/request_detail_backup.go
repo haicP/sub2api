@@ -55,6 +55,7 @@ func (s *RequestDetailBackupService) Start() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	s.recoverStaleRecords(ctx)
 	schedule, err := s.GetSchedule(ctx)
 	if err == nil && schedule.Enabled && schedule.CronExpr != "" {
 		_ = s.applyCronScheduleLocked(schedule)
@@ -81,6 +82,23 @@ func (s *RequestDetailBackupService) GetSchedule(ctx context.Context) (*BackupSc
 		return &BackupScheduleConfig{}, nil
 	}
 	return &cfg, nil
+}
+
+func (s *RequestDetailBackupService) recoverStaleRecords(ctx context.Context) {
+	records, err := s.loadRecords(ctx)
+	if err != nil {
+		return
+	}
+	for i := range records {
+		if records[i].Status != "running" {
+			continue
+		}
+		records[i].Status = "failed"
+		records[i].ErrorMsg = "interrupted by server restart"
+		records[i].Progress = ""
+		records[i].FinishedAt = requestDetailBackupNow().Format(time.RFC3339)
+		_ = s.saveRecord(ctx, &records[i])
+	}
 }
 
 func (s *RequestDetailBackupService) UpdateSchedule(ctx context.Context, cfg BackupScheduleConfig) (*BackupScheduleConfig, error) {
