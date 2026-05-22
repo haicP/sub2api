@@ -96,6 +96,12 @@ const requestDetailBodyJoins = `
 	LEFT JOIN request_detail_body_blobs rsb ON rsb.id = request_details.response_body_blob_id
 `
 
+const (
+	requestDetailLegacyBodyMigrationDefaultLimit      = 100
+	requestDetailLegacyBodyMigrationMaxBatchRawBytes  = 64 * 1024 * 1024
+	requestDetailLegacyBodyMigrationCandidateMinBytes = service.RequestDetailBodyCompressionMinSize
+)
+
 func NewRequestDetailRepository(client *dbent.Client, sqlDB *sql.DB) service.RequestDetailRepository {
 	return &requestDetailRepository{client: client, sql: sqlDB}
 }
@@ -425,7 +431,7 @@ func (r *requestDetailRepository) DeleteBefore(ctx context.Context, before time.
 
 func (r *requestDetailRepository) MigrateLegacyBodies(ctx context.Context, limit int) (int64, error) {
 	if limit <= 0 {
-		limit = 100
+		limit = requestDetailLegacyBodyMigrationDefaultLimit
 	}
 	db, ok := r.sql.(*sql.DB)
 	if !ok {
@@ -448,100 +454,119 @@ func (r *requestDetailRepository) MigrateLegacyBodies(ctx context.Context, limit
 }
 
 func (r *requestDetailRepository) migrateLegacyBodiesWithExecutor(ctx context.Context, exec sqlExecutor, limit int) (int64, error) {
-	rows, err := exec.QueryContext(ctx, `
-		SELECT id, request_body, upstream_request_body, response_content, response_body
-		FROM request_details
-		WHERE (request_body_blob_id IS NULL AND octet_length(request_body) >= $1)
-		   OR (upstream_request_body_blob_id IS NULL AND octet_length(upstream_request_body) >= $1)
-		   OR (response_content_blob_id IS NULL AND octet_length(response_content) >= $1)
-		   OR (response_body_blob_id IS NULL AND octet_length(response_body) >= $1)
-		ORDER BY id ASC
-		LIMIT $2
-		FOR UPDATE SKIP LOCKED
-	`, service.RequestDetailBodyCompressionMinSize, limit)
+	ids, err := selectLegacyBodyMigrationCandidates(ctx, exec, limit, requestDetailLegacyBodyMigrationMaxBatchRawBytes)
 	if err != nil {
 		return 0, err
 	}
 
-	type legacyRow struct {
-		id                  int64
-		requestBody         string
-		upstreamRequestBody string
-		responseContent     string
-		responseBody        string
-	}
-	var items []legacyRow
-	for rows.Next() {
-		var item legacyRow
-		if err := rows.Scan(&item.id, &item.requestBody, &item.upstreamRequestBody, &item.responseContent, &item.responseBody); err != nil {
-			_ = rows.Close()
-			return 0, err
-		}
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return 0, err
-	}
-	if err := rows.Close(); err != nil {
-		return 0, err
-	}
-
 	var migrated int64
-	for _, item := range items {
-		detail := &service.RequestDetail{
-			RequestBody:         item.requestBody,
-			UpstreamRequestBody: item.upstreamRequestBody,
-			ResponseContent:     item.responseContent,
-			ResponseBody:        item.responseBody,
-		}
-		prepared, err := prepareRequestDetailBodies(ctx, exec, detail)
-		if err != nil {
-			return migrated, err
-		}
-		if _, err := exec.ExecContext(ctx, `
-			UPDATE request_details SET
-				request_body = $2,
-				request_body_blob_id = $3,
-				request_body_sha256 = $4,
-				request_body_raw_bytes = $5,
-				upstream_request_body = $6,
-				upstream_request_body_blob_id = $7,
-				upstream_request_body_sha256 = $8,
-				upstream_request_body_raw_bytes = $9,
-				response_content = $10,
-				response_content_blob_id = $11,
-				response_content_sha256 = $12,
-				response_content_raw_bytes = $13,
-				response_body = $14,
-				response_body_blob_id = $15,
-				response_body_sha256 = $16,
-				response_body_raw_bytes = $17
-			WHERE id = $1
-		`,
-			item.id,
-			prepared.requestBody.inline,
-			nullableInt64Ptr(prepared.requestBody.ref.BlobID),
-			prepared.requestBody.ref.SHA256,
-			prepared.requestBody.ref.RawSizeBytes,
-			prepared.upstreamRequestBody.inline,
-			nullableInt64Ptr(prepared.upstreamRequestBody.ref.BlobID),
-			prepared.upstreamRequestBody.ref.SHA256,
-			prepared.upstreamRequestBody.ref.RawSizeBytes,
-			prepared.responseContent.inline,
-			nullableInt64Ptr(prepared.responseContent.ref.BlobID),
-			prepared.responseContent.ref.SHA256,
-			prepared.responseContent.ref.RawSizeBytes,
-			prepared.responseBody.inline,
-			nullableInt64Ptr(prepared.responseBody.ref.BlobID),
-			prepared.responseBody.ref.SHA256,
-			prepared.responseBody.ref.RawSizeBytes,
-		); err != nil {
+	for _, id := range ids {
+		if err := migrateLegacyBodyByID(ctx, exec, id); err != nil {
 			return migrated, err
 		}
 		migrated++
 	}
 	return migrated, nil
+}
+
+func selectLegacyBodyMigrationCandidates(ctx context.Context, exec sqlExecutor, limit int, maxRawBytes int64) ([]int64, error) {
+	rows, err := exec.QueryContext(ctx, `
+		SELECT id,
+			COALESCE(octet_length(request_body), 0)::BIGINT +
+			COALESCE(octet_length(upstream_request_body), 0)::BIGINT +
+			COALESCE(octet_length(response_content), 0)::BIGINT +
+			COALESCE(octet_length(response_body), 0)::BIGINT AS raw_size_bytes
+		FROM request_details
+		WHERE (request_body_blob_id IS NULL AND COALESCE(octet_length(request_body), 0) >= $1)
+		   OR (upstream_request_body_blob_id IS NULL AND COALESCE(octet_length(upstream_request_body), 0) >= $1)
+		   OR (response_content_blob_id IS NULL AND COALESCE(octet_length(response_content), 0) >= $1)
+		   OR (response_body_blob_id IS NULL AND COALESCE(octet_length(response_body), 0) >= $1)
+		ORDER BY id ASC
+		LIMIT $2
+		FOR UPDATE SKIP LOCKED
+	`, requestDetailLegacyBodyMigrationCandidateMinBytes, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	ids := make([]int64, 0, limit)
+	var selectedRawBytes int64
+	for rows.Next() {
+		var id int64
+		var rawBytes int64
+		if err := rows.Scan(&id, &rawBytes); err != nil {
+			return nil, err
+		}
+		if len(ids) > 0 && selectedRawBytes+rawBytes > maxRawBytes {
+			break
+		}
+		ids = append(ids, id)
+		selectedRawBytes += rawBytes
+		if selectedRawBytes >= maxRawBytes {
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+func migrateLegacyBodyByID(ctx context.Context, exec sqlExecutor, id int64) error {
+	var detail service.RequestDetail
+	if err := scanSingleRow(ctx, exec, `
+		SELECT request_body, upstream_request_body, response_content, response_body
+		FROM request_details
+		WHERE id = $1
+		FOR UPDATE
+	`, []any{id}, &detail.RequestBody, &detail.UpstreamRequestBody, &detail.ResponseContent, &detail.ResponseBody); err != nil {
+		return err
+	}
+
+	prepared, err := prepareRequestDetailBodies(ctx, exec, &detail)
+	if err != nil {
+		return err
+	}
+	_, err = exec.ExecContext(ctx, `
+		UPDATE request_details SET
+			request_body = $2,
+			request_body_blob_id = $3,
+			request_body_sha256 = $4,
+			request_body_raw_bytes = $5,
+			upstream_request_body = $6,
+			upstream_request_body_blob_id = $7,
+			upstream_request_body_sha256 = $8,
+			upstream_request_body_raw_bytes = $9,
+			response_content = $10,
+			response_content_blob_id = $11,
+			response_content_sha256 = $12,
+			response_content_raw_bytes = $13,
+			response_body = $14,
+			response_body_blob_id = $15,
+			response_body_sha256 = $16,
+			response_body_raw_bytes = $17
+		WHERE id = $1
+	`,
+		id,
+		prepared.requestBody.inline,
+		nullableInt64Ptr(prepared.requestBody.ref.BlobID),
+		prepared.requestBody.ref.SHA256,
+		prepared.requestBody.ref.RawSizeBytes,
+		prepared.upstreamRequestBody.inline,
+		nullableInt64Ptr(prepared.upstreamRequestBody.ref.BlobID),
+		prepared.upstreamRequestBody.ref.SHA256,
+		prepared.upstreamRequestBody.ref.RawSizeBytes,
+		prepared.responseContent.inline,
+		nullableInt64Ptr(prepared.responseContent.ref.BlobID),
+		prepared.responseContent.ref.SHA256,
+		prepared.responseContent.ref.RawSizeBytes,
+		prepared.responseBody.inline,
+		nullableInt64Ptr(prepared.responseBody.ref.BlobID),
+		prepared.responseBody.ref.SHA256,
+		prepared.responseBody.ref.RawSizeBytes,
+	)
+	return err
 }
 
 func (r *requestDetailRepository) CreateImageArtifacts(ctx context.Context, artifacts []service.RequestDetailImageArtifact) error {
@@ -682,19 +707,20 @@ type preparedRequestDetailBodies struct {
 }
 
 func prepareRequestDetailBodies(ctx context.Context, exec sqlExecutor, detail *service.RequestDetail) (*preparedRequestDetailBodies, error) {
-	cache := map[string]service.RequestDetailBodyRef{}
+	cache := map[string]preparedRequestDetailBody{}
 	prepare := func(raw string) (preparedRequestDetailBody, error) {
+		if cached, ok := cache[raw]; ok {
+			return cached, nil
+		}
 		ref := service.RequestDetailBodyRef{RawSizeBytes: len([]byte(raw))}
 		if raw == "" || len([]byte(raw)) < service.RequestDetailBodyCompressionMinSize {
-			return preparedRequestDetailBody{inline: raw, ref: ref}, nil
+			prepared := preparedRequestDetailBody{inline: raw, ref: ref}
+			cache[raw] = prepared
+			return prepared, nil
 		}
 		built, err := service.BuildRequestDetailBodyBlob(raw)
 		if err != nil {
 			return preparedRequestDetailBody{}, err
-		}
-		cacheKey := built.SHA256 + ":" + fmt.Sprintf("%d", built.RawSizeBytes) + ":" + built.Codec
-		if cached, ok := cache[cacheKey]; ok {
-			return preparedRequestDetailBody{ref: cached}, nil
 		}
 		blobID, err := upsertRequestDetailBodyBlob(ctx, exec, *built)
 		if err != nil {
@@ -702,8 +728,9 @@ func prepareRequestDetailBodies(ctx context.Context, exec sqlExecutor, detail *s
 		}
 		built.BlobID = &blobID
 		built.Content = nil
-		cache[cacheKey] = *built
-		return preparedRequestDetailBody{ref: *built}, nil
+		prepared := preparedRequestDetailBody{ref: *built}
+		cache[raw] = prepared
+		return prepared, nil
 	}
 
 	requestBody, err := prepare(detail.RequestBody)

@@ -350,10 +350,14 @@ func TestRequestDetailRepositoryMigrateLegacyBodiesCompressesLargeBodies(t *test
 
 	largeBody := strings.Repeat("legacy-body-", service.RequestDetailBodyCompressionMinSize/len("legacy-body-")+16)
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, request_body, upstream_request_body, response_content, response_body").
+	mock.ExpectQuery("(?s)SELECT id,.*raw_size_bytes").
 		WithArgs(service.RequestDetailBodyCompressionMinSize, 100).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "request_body", "upstream_request_body", "response_content", "response_body"}).
-			AddRow(int64(7), largeBody, largeBody, "small response content", "small response body"))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "raw_size_bytes"}).
+			AddRow(int64(7), int64(len(largeBody)*2+len("small response content")+len("small response body"))))
+	mock.ExpectQuery("SELECT request_body, upstream_request_body, response_content, response_body").
+		WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"request_body", "upstream_request_body", "response_content", "response_body"}).
+			AddRow(largeBody, largeBody, "small response content", "small response body"))
 	mock.ExpectQuery("INSERT INTO request_detail_body_blobs").
 		WithArgs(sqlmock.AnyArg(), service.RequestDetailBodyBlobCodecGzip, len(largeBody), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(91)))
@@ -364,6 +368,42 @@ func TestRequestDetailRepositoryMigrateLegacyBodiesCompressesLargeBodies(t *test
 			"", int64(91), sqlmock.AnyArg(), len(largeBody),
 			"small response content", nil, "", len("small response content"),
 			"small response body", nil, "", len("small response body"),
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	migrated, err := repo.MigrateLegacyBodies(ctx, 100)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), migrated)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRequestDetailRepositoryMigrateLegacyBodiesLimitsRawBytesPerBatch(t *testing.T) {
+	ctx := context.Background()
+	db, mock := newSQLMock(t)
+	repo := &requestDetailRepository{sql: db}
+
+	largeBody := strings.Repeat("x", service.RequestDetailBodyCompressionMinSize+1)
+	mock.ExpectBegin()
+	mock.ExpectQuery("(?s)SELECT id,.*raw_size_bytes").
+		WithArgs(service.RequestDetailBodyCompressionMinSize, 100).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "raw_size_bytes"}).
+			AddRow(int64(7), int64(requestDetailLegacyBodyMigrationMaxBatchRawBytes+1)).
+			AddRow(int64(8), int64(1024)))
+	mock.ExpectQuery("SELECT request_body, upstream_request_body, response_content, response_body").
+		WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"request_body", "upstream_request_body", "response_content", "response_body"}).
+			AddRow(largeBody, "", "", ""))
+	mock.ExpectQuery("INSERT INTO request_detail_body_blobs").
+		WithArgs(sqlmock.AnyArg(), service.RequestDetailBodyBlobCodecGzip, len(largeBody), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(91)))
+	mock.ExpectExec("UPDATE request_details SET").
+		WithArgs(
+			int64(7),
+			"", int64(91), sqlmock.AnyArg(), len(largeBody),
+			"", nil, "", 0,
+			"", nil, "", 0,
+			"", nil, "", 0,
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
