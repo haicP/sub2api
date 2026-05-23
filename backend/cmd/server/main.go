@@ -114,7 +114,7 @@ func runSetupServer() {
 	log.Printf("Setup wizard available at http://%s", addr)
 	log.Println("Complete the setup wizard to configure Sub2API")
 
-	protocols := &http.Protocols{}
+	protocols := new(http.Protocols)
 	protocols.SetHTTP1(true)
 	protocols.SetUnencryptedHTTP2(true)
 	server := &http.Server{

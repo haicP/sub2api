@@ -116,7 +116,7 @@ func ProvideHTTPServer(cfg *config.Config, router *gin.Engine) *http.Server {
 	// 根据配置决定是否启用 H2C
 	if cfg.Server.H2C.Enabled {
 		h2cConfig := cfg.Server.H2C
-		protocols = &http.Protocols{}
+		protocols = new(http.Protocols)
 		protocols.SetHTTP1(true)
 		protocols.SetUnencryptedHTTP2(true)
 		http2Config = &http.HTTP2Config{
