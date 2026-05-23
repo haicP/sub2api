@@ -127,15 +127,18 @@ func useFastRequestDetailBackupRetry(t *testing.T) {
 }
 
 func TestRequestDetailBackupWritesGzipNDJSON(t *testing.T) {
-	ref, err := BuildRequestDetailBodyBlob(strings.Repeat("large-body-", 1024))
+	largeBody := strings.Repeat("large-body-", 1024)
+	responseContent := "full response content"
+	ref, err := BuildRequestDetailBodyBlob(largeBody)
 	require.NoError(t, err)
 	repo := &requestDetailBackupRepoStub{items: []RequestDetail{{
 		RequestID:           "req-backup",
 		CreatedAt:           time.Now(),
-		RequestBody:         strings.Repeat("large-body-", 1024),
-		UpstreamRequestBody: strings.Repeat("large-body-", 1024),
+		RequestBody:         largeBody,
+		UpstreamRequestBody: largeBody,
 		RequestBodyRef:      *ref,
 		UpstreamRequestRef:  *ref,
+		ResponseContent:     responseContent,
 		ResponseBody:        `{"b":2}`,
 	}}}
 	svc := NewRequestDetailService(repo)
@@ -150,14 +153,27 @@ func TestRequestDetailBackupWritesGzipNDJSON(t *testing.T) {
 	out, err := io.ReadAll(reader)
 	require.NoError(t, err)
 	body := string(out)
-	require.Contains(t, body, `"type":"body_blob"`)
 	require.Contains(t, body, `"type":"request_detail"`)
+	require.Contains(t, body, `"format_version":3`)
 	require.Contains(t, body, `"request_id":"req-backup"`)
-	require.Equal(t, 1, strings.Count(body, `"type":"body_blob"`))
+	require.NotContains(t, body, `"type":"body_blob"`)
+	require.NotContains(t, body, `"request_body_ref"`)
+	require.NotContains(t, body, `"upstream_request_body_ref"`)
+	require.NotContains(t, body, `"response_content_ref"`)
+	require.NotContains(t, body, `"response_body_ref"`)
 	require.True(t, strings.HasSuffix(string(out), "\n"))
+
+	var record requestDetailBackupDetailRecord
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(out), &record))
+	require.Equal(t, "request_detail", record.Type)
+	require.Equal(t, 3, record.FormatVersion)
+	require.Equal(t, largeBody, record.Detail.RequestBody)
+	require.Equal(t, largeBody, record.Detail.UpstreamRequestBody)
+	require.Equal(t, responseContent, record.Detail.ResponseContent)
+	require.Equal(t, `{"b":2}`, record.Detail.ResponseBody)
 }
 
-func TestRequestDetailBackupCompressesLegacyInlineLargeBodies(t *testing.T) {
+func TestRequestDetailBackupWritesLegacyInlineLargeBodies(t *testing.T) {
 	largeBody := strings.Repeat("legacy-large-body-", 1024)
 	repo := &requestDetailBackupRepoStub{items: []RequestDetail{{
 		RequestID:           "req-legacy-backup",
@@ -170,14 +186,19 @@ func TestRequestDetailBackupCompressesLegacyInlineLargeBodies(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, svc.WriteBackupNDJSON(context.Background(), RequestDetailFilters{}, &buf))
 	body := buf.String()
-	require.Equal(t, 1, strings.Count(body, `"type":"body_blob"`))
 	require.Contains(t, body, `"type":"request_detail"`)
+	require.Contains(t, body, `"format_version":3`)
 	require.Contains(t, body, `"request_id":"req-legacy-backup"`)
-	require.NotContains(t, body, largeBody)
+	require.Contains(t, body, largeBody)
+	require.NotContains(t, body, `"type":"body_blob"`)
+	require.NotContains(t, body, `"request_body_ref"`)
+	require.NotContains(t, body, `"upstream_request_body_ref"`)
+	require.NotContains(t, body, `"response_content_ref"`)
+	require.NotContains(t, body, `"response_body_ref"`)
 	require.NotContains(t, body, `"inline":"legacy-large-body-`)
 }
 
-func TestRequestDetailBackupUploadUsesV2ArchiveFormat(t *testing.T) {
+func TestRequestDetailBackupUploadUsesV3FullBodyArchiveFormat(t *testing.T) {
 	largeBody := strings.Repeat("upload-large-body-", 1024)
 	blockCh := make(chan struct{})
 	repo := &requestDetailBackupBlockingRepoStub{
@@ -210,9 +231,21 @@ func TestRequestDetailBackupUploadUsesV2ArchiveFormat(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, reader.Close())
 	body := string(out)
-	require.Equal(t, 1, strings.Count(body, `"type":"body_blob"`))
 	require.Contains(t, body, `"type":"request_detail"`)
-	require.NotContains(t, body, largeBody)
+	require.Contains(t, body, `"format_version":3`)
+	require.Contains(t, body, largeBody)
+	require.NotContains(t, body, `"type":"body_blob"`)
+	require.NotContains(t, body, `"request_body_ref"`)
+	require.NotContains(t, body, `"upstream_request_body_ref"`)
+	require.NotContains(t, body, `"response_content_ref"`)
+	require.NotContains(t, body, `"response_body_ref"`)
+
+	var recordLine requestDetailBackupDetailRecord
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(out), &recordLine))
+	require.Equal(t, "request_detail", recordLine.Type)
+	require.Equal(t, 3, recordLine.FormatVersion)
+	require.Equal(t, largeBody, recordLine.Detail.RequestBody)
+	require.Equal(t, largeBody, recordLine.Detail.UpstreamRequestBody)
 }
 
 type requestDetailBackupBlockingRepoStub struct {

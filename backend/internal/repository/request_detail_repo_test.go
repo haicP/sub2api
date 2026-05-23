@@ -327,6 +327,94 @@ func TestRequestDetailRepositoryStreamAllReturnsFullBodies(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestRequestDetailRepositoryStreamAllDecodesBlobBodies(t *testing.T) {
+	ctx := context.Background()
+	db, mock := newSQLMock(t)
+	repo := NewRequestDetailRepository(nil, db)
+
+	createdAt := time.Date(2026, 5, 23, 10, 30, 0, 0, time.UTC)
+	requestBody := strings.Repeat(`{"role":"user","content":"request"}`, 512)
+	upstreamRequestBody := strings.Repeat(`{"role":"user","content":"upstream"}`, 512)
+	responseContent := strings.Repeat("assistant response content", 512)
+	responseBody := strings.Repeat(`{"choices":[{"delta":{"content":"response"}}]}`, 512)
+	requestRef, err := service.BuildRequestDetailBodyBlob(requestBody)
+	require.NoError(t, err)
+	upstreamRef, err := service.BuildRequestDetailBodyBlob(upstreamRequestBody)
+	require.NoError(t, err)
+	responseContentRef, err := service.BuildRequestDetailBodyBlob(responseContent)
+	require.NoError(t, err)
+	responseRef, err := service.BuildRequestDetailBodyBlob(responseBody)
+	require.NoError(t, err)
+
+	rows := requestDetailRows().
+		AddRow(requestDetailRowValuesWithRefs(t, requestDetailRowInput{
+			ID:                            22,
+			RequestID:                     "req-stream-blob",
+			CreatedAt:                     createdAt,
+			StatusCode:                    200,
+			Success:                       true,
+			Platform:                      "openai",
+			Endpoint:                      "/v1/responses",
+			UpstreamEndpoint:              "/v1/responses",
+			Model:                         "gpt-5.1",
+			UpstreamModel:                 "gpt-5.1",
+			Stream:                        true,
+			IPAddress:                     "127.0.0.1",
+			UserAgent:                     "ua",
+			RequestHeaders:                map[string][]string{},
+			ResponseHeaders:               map[string][]string{},
+			RequestBodyBytes:              len(requestBody),
+			UpstreamRequestBodyBytes:      len(upstreamRequestBody),
+			ResponseContentBytes:          len(responseContent),
+			ResponseBodyBytes:             len(responseBody),
+			RequestBodyBlobID:             int64(91),
+			RequestBodySHA:                requestRef.SHA256,
+			RequestBodyBlobContent:        requestRef.Content,
+			RequestBodyBlobCodec:          requestRef.Codec,
+			RequestBodyBlobRawSize:        requestRef.RawSizeBytes,
+			RequestBodyBlobCompressed:     requestRef.CompressedSizeBytes,
+			UpstreamBodyBlobID:            int64(92),
+			UpstreamBodySHA:               upstreamRef.SHA256,
+			UpstreamBodyBlobContent:       upstreamRef.Content,
+			UpstreamBodyBlobCodec:         upstreamRef.Codec,
+			UpstreamBodyBlobRawSize:       upstreamRef.RawSizeBytes,
+			UpstreamBodyBlobCompressed:    upstreamRef.CompressedSizeBytes,
+			ResponseContentBlobID:         int64(93),
+			ResponseContentSHA:            responseContentRef.SHA256,
+			ResponseContentBlobContent:    responseContentRef.Content,
+			ResponseContentBlobCodec:      responseContentRef.Codec,
+			ResponseContentBlobRawSize:    responseContentRef.RawSizeBytes,
+			ResponseContentBlobCompressed: responseContentRef.CompressedSizeBytes,
+			ResponseBodyBlobID:            int64(94),
+			ResponseBodySHA:               responseRef.SHA256,
+			ResponseBodyBlobContent:       responseRef.Content,
+			ResponseBodyBlobCodec:         responseRef.Codec,
+			ResponseBodyBlobRawSize:       responseRef.RawSizeBytes,
+			ResponseBodyBlobCompressed:    responseRef.CompressedSizeBytes,
+			ResponseTruncated:             false,
+			ErrorMessage:                  "",
+		})...)
+
+	mock.ExpectQuery("(?s)FROM request_details\\s+LEFT JOIN request_detail_body_blobs rb ON rb\\.id = request_details\\.request_body_blob_id.*ORDER BY request_details\\.created_at ASC, request_details\\.id ASC").
+		WillReturnRows(rows)
+	mock.ExpectQuery("FROM request_detail_image_artifacts").
+		WithArgs("req-stream-blob").
+		WillReturnRows(requestDetailImageArtifactRows())
+
+	var streamed []service.RequestDetail
+	err = repo.StreamAll(ctx, service.RequestDetailFilters{}, func(detail service.RequestDetail) error {
+		streamed = append(streamed, detail)
+		return nil
+	})
+	require.NoError(t, err)
+	require.Len(t, streamed, 1)
+	require.Equal(t, requestBody, streamed[0].RequestBody)
+	require.Equal(t, upstreamRequestBody, streamed[0].UpstreamRequestBody)
+	require.Equal(t, responseContent, streamed[0].ResponseContent)
+	require.Equal(t, responseBody, streamed[0].ResponseBody)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestRequestDetailRepositoryDeleteBeforeDeletesDetailsAndArtifacts(t *testing.T) {
 	ctx := context.Background()
 	db, mock := newSQLMock(t)
