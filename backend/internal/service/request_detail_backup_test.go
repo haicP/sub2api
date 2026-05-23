@@ -278,7 +278,7 @@ type requestDetailBackupStoreStub struct {
 	uploadCh            chan struct{}
 	uploadNotified      bool
 	uploadErr           error
-	uploadHook          func() error
+	uploadHook          func(key string) error
 	deleteErr           error
 	headObjectErr       error
 	headObjectSizeDelta int64
@@ -305,7 +305,7 @@ func (s *requestDetailBackupStoreStub) Upload(_ context.Context, key string, bod
 		s.uploadNotified = true
 	}
 	if s.uploadHook != nil {
-		if err := s.uploadHook(); err != nil {
+		if err := s.uploadHook(key); err != nil {
 			return 0, err
 		}
 	}
@@ -437,6 +437,50 @@ func TestRequestDetailBackupStartBackupReturnsRunningAndCompletesAsync(t *testin
 	require.Len(t, repo.filters, 1)
 	require.Nil(t, repo.filters[0].StartTime)
 	require.Nil(t, repo.filters[0].EndTime)
+}
+
+func TestRequestDetailBackupUploadsReadmeSummaryAfterCompletion(t *testing.T) {
+	fixedNow := time.Date(2026, 5, 22, 9, 30, 0, 0, time.Local)
+	originalNow := requestDetailBackupNow
+	requestDetailBackupNow = func() time.Time { return fixedNow }
+	t.Cleanup(func() { requestDetailBackupNow = originalNow })
+
+	blockCh := make(chan struct{})
+	repo := &requestDetailBackupBlockingRepoStub{
+		blockCh: blockCh,
+		items: []RequestDetail{
+			{RequestID: "req-readme-1", CreatedAt: fixedNow.Add(time.Minute), RequestBody: `{"a":1}`},
+			{RequestID: "req-readme-2", CreatedAt: fixedNow.Add(2 * time.Minute), RequestBody: `{"b":2}`},
+		},
+	}
+	store := newRequestDetailBackupStoreStub()
+	svc := newRequestDetailBackupTestService(repo, store, nil)
+
+	record, err := svc.StartBackup(context.Background(), "manual")
+	require.NoError(t, err)
+	close(blockCh)
+	require.Eventually(t, func() bool {
+		final, err := svc.GetBackupRecord(context.Background(), record.ID)
+		return err == nil && final.Status == "completed" && final.ReadmeS3Key != ""
+	}, time.Second, 10*time.Millisecond)
+
+	final, err := svc.GetBackupRecord(context.Background(), record.ID)
+	require.NoError(t, err)
+	require.Equal(t, "readme_20260522_093000.txt", final.ReadmeFileName)
+	require.Equal(t, "backups/request-details/20260522/readme_20260522_093000.txt", final.ReadmeS3Key)
+	require.Greater(t, final.ReadmeSizeBytes, int64(0))
+
+	readme := string(store.objects[final.ReadmeS3Key])
+	require.Contains(t, readme, "request_detail_backup_summary\n")
+	require.Contains(t, readme, "backup_id: "+record.ID+"\n")
+	require.Contains(t, readme, "date: 2026-05-22\n")
+	require.Contains(t, readme, "started_at: "+fixedNow.Format(time.RFC3339)+"\n")
+	require.Contains(t, readme, "finished_at: "+fixedNow.Format(time.RFC3339)+"\n")
+	require.Contains(t, readme, "record_count: 2\n")
+	require.Contains(t, readme, "part_count: 1\n")
+	require.Contains(t, readme, fmt.Sprintf("total_file_size_bytes: %d\n", final.SizeBytes))
+	require.Contains(t, readme, final.Parts[0].FileName)
+	require.Contains(t, readme, final.Parts[0].S3Key)
 }
 
 func TestRequestDetailBackupScheduledBackupUsesPreviousDayFilter(t *testing.T) {
@@ -583,7 +627,7 @@ func TestRequestDetailBackupContinuesExportWhileUploadIsBlocked(t *testing.T) {
 	uploadStarted := make(chan struct{})
 	releaseUpload := make(chan struct{})
 	firstUpload := true
-	store.uploadHook = func() error {
+	store.uploadHook = func(string) error {
 		if firstUpload {
 			firstUpload = false
 			close(uploadStarted)
@@ -701,9 +745,11 @@ func TestRequestDetailBackupRetriesCurrentPartAndDeletesCacheAfterSuccess(t *tes
 	}
 	store := newRequestDetailBackupStoreStub()
 	uploadCount := 0
-	store.uploadHook = func() error {
-		uploadCount++
-		if uploadCount <= 2 {
+	store.uploadHook = func(key string) error {
+		if strings.Contains(key, "part001") {
+			uploadCount++
+		}
+		if strings.Contains(key, "part001") && uploadCount <= 2 {
 			return fmt.Errorf("temporary S3 PutObject failed")
 		}
 		return nil
@@ -742,7 +788,7 @@ func TestRequestDetailBackupUploadFailureDeletesUploadedParts(t *testing.T) {
 	}
 	store := newRequestDetailBackupStoreStub()
 	uploadCount := 0
-	store.uploadHook = func() error {
+	store.uploadHook = func(string) error {
 		uploadCount++
 		if uploadCount >= 2 {
 			return fmt.Errorf("S3 PutObject failed")
@@ -770,11 +816,14 @@ func TestRequestDetailBackupDeleteRemovesPartsAndRecord(t *testing.T) {
 	store := newRequestDetailBackupStoreStub()
 	svc := newRequestDetailBackupTestService(&requestDetailBackupRepoStub{}, store, nil)
 	require.NoError(t, svc.saveRecord(context.Background(), &BackupRecord{
-		ID:         "backup-delete",
-		Status:     "completed",
-		BackupType: "request_details",
-		FileName:   "part001.ndjson.gz",
-		S3Key:      "backups/request-details/20260522/part001.ndjson.gz",
+		ID:              "backup-delete",
+		Status:          "completed",
+		BackupType:      "request_details",
+		FileName:        "part001.ndjson.gz",
+		S3Key:           "backups/request-details/20260522/part001.ndjson.gz",
+		ReadmeFileName:  "readme_20260522_093000.txt",
+		ReadmeS3Key:     "backups/request-details/20260522/readme_20260522_093000.txt",
+		ReadmeSizeBytes: 100,
 		Parts: []BackupRecordPart{
 			{Index: 1, FileName: "part001.ndjson.gz", S3Key: "backups/request-details/20260522/part001.ndjson.gz", SizeBytes: 10},
 			{Index: 2, FileName: "part002.ndjson.gz", S3Key: "backups/request-details/20260522/part002.ndjson.gz", SizeBytes: 20},
@@ -789,6 +838,7 @@ func TestRequestDetailBackupDeleteRemovesPartsAndRecord(t *testing.T) {
 	require.ElementsMatch(t, []string{
 		"backups/request-details/20260522/part001.ndjson.gz",
 		"backups/request-details/20260522/part002.ndjson.gz",
+		"backups/request-details/20260522/readme_20260522_093000.txt",
 	}, store.deleted)
 }
 

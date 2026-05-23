@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
@@ -23,6 +24,7 @@ const (
 	settingKeyRequestDetailBackupSchedule = "request_detail_backup_schedule"
 	settingKeyRequestDetailBackupRecords  = "request_detail_backup_records"
 	requestDetailBackupContentType        = "application/gzip"
+	requestDetailBackupReadmeContentType  = "text/plain; charset=utf-8"
 	requestDetailBackupCacheDirName       = "request-detail-backup-cache"
 )
 
@@ -58,6 +60,12 @@ func (w *countingWriter) Write(p []byte) (int, error) {
 type requestDetailBackupTempPart struct {
 	BackupRecordPart
 	tempPath string
+}
+
+type requestDetailBackupReadmeObject struct {
+	FileName  string
+	S3Key     string
+	SizeBytes int64
 }
 
 type requestDetailBackupRecordUpdater func(context.Context, func(*BackupRecord)) error
@@ -315,7 +323,7 @@ func (s *RequestDetailBackupService) executeBackup(record *BackupRecord, store B
 		record.Progress = "exporting"
 	})
 
-	uploadedParts, totalSize, err := s.writeAndUploadRequestDetailBackupParts(ctx, store, cfg, record, startedAt, filters, updateRecord)
+	uploadedParts, totalSize, recordCount, err := s.writeAndUploadRequestDetailBackupParts(ctx, store, cfg, record, startedAt, filters, updateRecord)
 	if err != nil {
 		_ = updateRecord(context.Background(), func(record *BackupRecord) {
 			recordRequestDetailBackupFailure(record, err)
@@ -335,25 +343,41 @@ func (s *RequestDetailBackupService) executeBackup(record *BackupRecord, store B
 		return
 	}
 
+	finishedAt := requestDetailBackupNow()
+	_ = updateRecord(ctx, func(record *BackupRecord) {
+		record.Progress = "uploading readme"
+	})
+	readmeObject, err := uploadRequestDetailBackupReadme(ctx, store, cfg, snapshotRecord(), uploadedParts, totalSize, recordCount, startedAt, finishedAt)
+	if err != nil {
+		_ = updateRecord(context.Background(), func(record *BackupRecord) {
+			recordRequestDetailBackupFailure(record, err)
+		})
+		cleanupUploadedRequestDetailBackupParts(context.Background(), store, uploadedParts)
+		return
+	}
+
 	_ = updateRecord(context.Background(), func(record *BackupRecord) {
 		record.Status = "completed"
 		record.FileName = uploadedParts[0].FileName
 		record.S3Key = uploadedParts[0].S3Key
 		record.SizeBytes = totalSize
 		record.Parts = uploadedParts
+		record.ReadmeFileName = readmeObject.FileName
+		record.ReadmeS3Key = readmeObject.S3Key
+		record.ReadmeSizeBytes = readmeObject.SizeBytes
 		record.Progress = ""
-		record.FinishedAt = time.Now().Format(time.RFC3339)
+		record.FinishedAt = finishedAt.Format(time.RFC3339)
 	})
 }
 
-func (s *RequestDetailBackupService) writeAndUploadRequestDetailBackupParts(ctx context.Context, store BackupObjectStore, cfg *BackupS3Config, record *BackupRecord, startedAt time.Time, filters RequestDetailFilters, updateRecord requestDetailBackupRecordUpdater) ([]BackupRecordPart, int64, error) {
+func (s *RequestDetailBackupService) writeAndUploadRequestDetailBackupParts(ctx context.Context, store BackupObjectStore, cfg *BackupS3Config, record *BackupRecord, startedAt time.Time, filters RequestDetailFilters, updateRecord requestDetailBackupRecordUpdater) ([]BackupRecordPart, int64, int64, error) {
 	if s == nil || s.requestDetailService == nil || s.requestDetailService.repo == nil {
-		return nil, 0, ErrBackupS3NotConfigured.WithCause(fmt.Errorf("request detail backup service is not initialized"))
+		return nil, 0, 0, ErrBackupS3NotConfigured.WithCause(fmt.Errorf("request detail backup service is not initialized"))
 	}
 	dateFolder := startedAt.Format("20060102")
 	cacheDir := s.requestDetailBackupCacheDir(record.ID)
 	if err := os.MkdirAll(cacheDir, 0750); err != nil {
-		return nil, 0, fmt.Errorf("create request detail backup cache dir: %w", err)
+		return nil, 0, 0, fmt.Errorf("create request detail backup cache dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(cacheDir) }()
 
@@ -379,6 +403,7 @@ func (s *RequestDetailBackupService) writeAndUploadRequestDetailBackupParts(ctx 
 
 	var current *requestDetailBackupPartWriter
 	nextPartIndex := 1
+	var recordCount int64
 
 	sendCurrent := func() error {
 		if current == nil {
@@ -431,6 +456,7 @@ func (s *RequestDetailBackupService) writeAndUploadRequestDetailBackupParts(ctx 
 		if err := current.flush(); err != nil {
 			return err
 		}
+		recordCount++
 		if current.sizeBytes() < requestDetailBackupPartSizeBytes {
 			return nil
 		}
@@ -446,38 +472,38 @@ func (s *RequestDetailBackupService) writeAndUploadRequestDetailBackupParts(ctx 
 		}
 		result := waitUpload()
 		if result.err != nil {
-			return nil, 0, result.err
+			return nil, 0, 0, result.err
 		}
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 	if err := sendCurrent(); err != nil {
 		cancelUpload()
 		result := waitUpload()
 		if result.err != nil {
-			return nil, 0, result.err
+			return nil, 0, 0, result.err
 		}
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 	if nextPartIndex == 1 {
 		if err := openNext(); err != nil {
 			cancelUpload()
 			_ = waitUpload()
-			return nil, 0, err
+			return nil, 0, 0, err
 		}
 		if err := sendCurrent(); err != nil {
 			cancelUpload()
 			result := waitUpload()
 			if result.err != nil {
-				return nil, 0, result.err
+				return nil, 0, 0, result.err
 			}
-			return nil, 0, err
+			return nil, 0, 0, err
 		}
 	}
 	result := waitUpload()
 	if result.err != nil {
-		return nil, 0, result.err
+		return nil, 0, 0, result.err
 	}
-	return result.parts, result.totalSize, nil
+	return result.parts, result.totalSize, recordCount, nil
 }
 
 type requestDetailBackupUploadResult struct {
@@ -567,6 +593,68 @@ func uploadRequestDetailBackupPart(ctx context.Context, store BackupObjectStore,
 		return 0, fmt.Errorf("S3 upload verification failed: object size is %d bytes key=%s content_type=%s", sizeBytes, part.S3Key, requestDetailBackupContentType)
 	}
 	return sizeBytes, nil
+}
+
+func uploadRequestDetailBackupReadme(ctx context.Context, store BackupObjectStore, cfg *BackupS3Config, record BackupRecord, parts []BackupRecordPart, totalSize int64, recordCount int64, startedAt time.Time, finishedAt time.Time) (*requestDetailBackupReadmeObject, error) {
+	dateFolder := startedAt.Format("20060102")
+	fileName := buildRequestDetailBackupReadmeFileName(startedAt)
+	s3Key := buildRequestDetailBackupReadmeKey(cfg, dateFolder, fileName)
+	body := buildRequestDetailBackupReadmeContent(record, parts, totalSize, recordCount, startedAt, finishedAt, fileName, s3Key)
+	sizeBytes, err := store.Upload(ctx, s3Key, bytes.NewReader(body), requestDetailBackupReadmeContentType)
+	if err != nil {
+		_ = store.Delete(context.Background(), s3Key)
+		return nil, fmt.Errorf("upload request detail backup readme: %w", err)
+	}
+	if sizeBytes <= 0 {
+		_ = store.Delete(context.Background(), s3Key)
+		return nil, fmt.Errorf("S3 upload verification failed: readme object size is %d bytes key=%s content_type=%s", sizeBytes, s3Key, requestDetailBackupReadmeContentType)
+	}
+	return &requestDetailBackupReadmeObject{
+		FileName:  fileName,
+		S3Key:     s3Key,
+		SizeBytes: sizeBytes,
+	}, nil
+}
+
+func buildRequestDetailBackupReadmeContent(record BackupRecord, parts []BackupRecordPart, totalSize int64, recordCount int64, startedAt time.Time, finishedAt time.Time, readmeFileName string, readmeS3Key string) []byte {
+	var b strings.Builder
+	fmt.Fprintf(&b, "request_detail_backup_summary\n")
+	fmt.Fprintf(&b, "backup_id: %s\n", record.ID)
+	fmt.Fprintf(&b, "backup_type: request_details\n")
+	fmt.Fprintf(&b, "status: completed\n")
+	fmt.Fprintf(&b, "triggered_by: %s\n", record.TriggeredBy)
+	fmt.Fprintf(&b, "date: %s\n", startedAt.Format("2006-01-02"))
+	fmt.Fprintf(&b, "started_at: %s\n", startedAt.Format(time.RFC3339))
+	fmt.Fprintf(&b, "finished_at: %s\n", finishedAt.Format(time.RFC3339))
+	fmt.Fprintf(&b, "record_count: %d\n", recordCount)
+	fmt.Fprintf(&b, "part_count: %d\n", len(parts))
+	fmt.Fprintf(&b, "total_file_size_bytes: %d\n", totalSize)
+	fmt.Fprintf(&b, "total_file_size_human: %s\n", formatRequestDetailBackupSize(totalSize))
+	fmt.Fprintf(&b, "readme_file_name: %s\n", readmeFileName)
+	fmt.Fprintf(&b, "readme_s3_key: %s\n", readmeS3Key)
+	fmt.Fprintf(&b, "\nparts:\n")
+	for _, part := range parts {
+		fmt.Fprintf(&b, "- index: %d\n", part.Index)
+		fmt.Fprintf(&b, "  file_name: %s\n", part.FileName)
+		fmt.Fprintf(&b, "  s3_key: %s\n", part.S3Key)
+		fmt.Fprintf(&b, "  size_bytes: %d\n", part.SizeBytes)
+		fmt.Fprintf(&b, "  size_human: %s\n", formatRequestDetailBackupSize(part.SizeBytes))
+	}
+	return []byte(b.String())
+}
+
+func formatRequestDetailBackupSize(sizeBytes int64) string {
+	if sizeBytes < 1024 {
+		return fmt.Sprintf("%d B", sizeBytes)
+	}
+	units := []string{"KB", "MB", "GB", "TB"}
+	value := float64(sizeBytes)
+	unitIndex := -1
+	for value >= 1024 && unitIndex < len(units)-1 {
+		value /= 1024
+		unitIndex++
+	}
+	return fmt.Sprintf("%.2f %s", value, units[unitIndex])
 }
 
 type requestDetailBackupPartWriter struct {
@@ -759,6 +847,9 @@ func (s *RequestDetailBackupService) DeleteBackup(ctx context.Context, id string
 					_ = store.Delete(ctx, part.S3Key)
 				}
 			}
+			if strings.TrimSpace(found.ReadmeS3Key) != "" {
+				_ = store.Delete(ctx, found.ReadmeS3Key)
+			}
 		}
 	}
 
@@ -863,6 +954,14 @@ func buildRequestDetailBackupKey(cfg *BackupS3Config, dateFolder string, fileNam
 		prefix = "backups"
 	}
 	return fmt.Sprintf("%s/request-details/%s/%s", prefix, dateFolder, fileName)
+}
+
+func buildRequestDetailBackupReadmeFileName(startedAt time.Time) string {
+	return fmt.Sprintf("readme_%s.txt", startedAt.Format("20060102_150405"))
+}
+
+func buildRequestDetailBackupReadmeKey(cfg *BackupS3Config, dateFolder string, fileName string) string {
+	return buildRequestDetailBackupKey(cfg, dateFolder, fileName)
 }
 
 func normalizeRequestDetailBackupRecordParts(record *BackupRecord) []BackupRecordPart {
