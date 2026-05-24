@@ -81,7 +81,7 @@ func RegisterGatewayRoutes(
 			}
 			h.Gateway.Responses(c)
 		})
-		gateway.GET("/responses", h.OpenAIGateway.ResponsesWebSocket)
+		gateway.GET("/responses", requestDetailCapture, h.OpenAIGateway.ResponsesWebSocket)
 		// OpenAI Chat Completions API: auto-route based on group platform
 		gateway.POST("/chat/completions", requestDetailCapture, func(c *gin.Context) {
 			if getGroupPlatform(c) == service.PlatformOpenAI {
@@ -141,7 +141,7 @@ func RegisterGatewayRoutes(
 	}
 	r.POST("/responses", bodyLimit, clientRequestID, requestDetailCapture, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, responsesHandler)
 	r.POST("/responses/*subpath", bodyLimit, clientRequestID, requestDetailCapture, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, responsesHandler)
-	r.GET("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.OpenAIGateway.ResponsesWebSocket)
+	r.GET("/responses", bodyLimit, clientRequestID, requestDetailCapture, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.OpenAIGateway.ResponsesWebSocket)
 	codexDirect := r.Group("/backend-api/codex")
 	codexDirect.Use(bodyLimit, clientRequestID, requestDetailCapture, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic)
 	{

@@ -221,10 +221,13 @@ func (e *OpenAIWSClientCloseError) Reason() string {
 type OpenAIWSIngressHooks struct {
 	// InitialRequestModel 是首帧渠道映射前的请求模型，只用于 usage metadata
 	// 的 reasoning effort 后缀推导，禁止用于上游请求或计费模型。
-	InitialRequestModel string
-	BeforeTurn          func(turn int) error
-	BeforeRequest       func(turn int, payload []byte, originalModel string) error
-	AfterTurn           func(turn int, result *OpenAIForwardResult, turnErr error)
+	InitialRequestModel   string
+	BeforeTurn            func(turn int) error
+	BeforeRequest         func(turn int, payload []byte, originalModel string) error
+	AfterTurn             func(turn int, result *OpenAIForwardResult, turnErr error)
+	OnTurnRequest         func(turn int, msgType coderws.MessageType, payload []byte, originalModel string)
+	OnTurnUpstreamRequest func(turn int, msgType coderws.MessageType, payload []byte, originalModel string)
+	OnTurnDownstreamFrame func(turn int, msgType coderws.MessageType, payload []byte)
 }
 
 func normalizeOpenAIWSLogValue(value string) string {
@@ -2630,6 +2633,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	if err != nil {
 		return err
 	}
+	if hooks != nil && hooks.OnTurnRequest != nil {
+		hooks.OnTurnRequest(1, coderws.MessageText, firstPayload.rawForHash, firstPayload.originalModel)
+	}
 
 	turnState := strings.TrimSpace(c.GetHeader(openAIWSTurnStateHeader))
 	stateStore := s.getOpenAIWSStateStore()
@@ -2829,6 +2835,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		}
 		turnStart := time.Now()
 		wroteDownstream := false
+		if hooks != nil && hooks.OnTurnUpstreamRequest != nil {
+			hooks.OnTurnUpstreamRequest(turn, coderws.MessageText, payload, originalModel)
+		}
 		if err := lease.WriteJSONWithContextTimeout(ctx, json.RawMessage(payload), s.openAIWSWriteTimeout()); err != nil {
 			return nil, wrapOpenAIWSIngressTurnError(
 				"write_upstream",
@@ -2980,6 +2989,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					if corrected, changed := s.toolCorrector.CorrectToolCallsInSSEBytes(upstreamMessage); changed {
 						upstreamMessage = corrected
 					}
+				}
+				if hooks != nil && hooks.OnTurnDownstreamFrame != nil {
+					hooks.OnTurnDownstreamFrame(turn, coderws.MessageText, upstreamMessage)
 				}
 				if err := writeClientMessage(upstreamMessage); err != nil {
 					if isOpenAIWSClientDisconnectError(err) {
@@ -3617,6 +3629,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		nextPayload, parseErr := parseClientPayload(nextClientMessage)
 		if parseErr != nil {
 			return parseErr
+		}
+		if hooks != nil && hooks.OnTurnRequest != nil {
+			hooks.OnTurnRequest(turn+1, coderws.MessageText, nextPayload.rawForHash, nextPayload.originalModel)
 		}
 		if nextPayload.promptCacheKey != "" {
 			// ingress 会话在整个客户端 WS 生命周期内复用同一上游连接；

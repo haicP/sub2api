@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -33,10 +35,245 @@ type OpenAIGatewayHandler struct {
 	usageRecordWorkerPool    *service.UsageRecordWorkerPool
 	errorPassthroughService  *service.ErrorPassthroughService
 	contentModerationService *service.ContentModerationService
+	requestDetailService     *service.RequestDetailService
 	concurrencyHelper        *ConcurrencyHelper
 	imageLimiter             *imageConcurrencyLimiter
 	maxAccountSwitches       int
 	cfg                      *config.Config
+}
+
+type openAIWSTurnRequestDetailMeta struct {
+	ConnectionRequestID string
+	Endpoint            string
+	UpstreamEndpoint    string
+	UserID              int64
+	APIKeyID            int64
+	AccountID           int64
+	GroupID             *int64
+	SubscriptionID      *int64
+	IPAddress           string
+	UserAgent           string
+	RequestHeaders      map[string][]string
+	ResponseHeaders     map[string][]string
+}
+
+type openAIWSTurnRecorder struct {
+	turn          int
+	requestID     string
+	startedAt     time.Time
+	model         string
+	upstreamModel string
+	requestBody   bytes.Buffer
+	upstreamBody  bytes.Buffer
+	responseBody  bytes.Buffer
+}
+
+type openAIWSTurnRecorders struct {
+	service *service.RequestDetailService
+	meta    openAIWSTurnRequestDetailMeta
+	turns   map[int]*openAIWSTurnRecorder
+}
+
+func newOpenAIWSTurnRecorders(svc *service.RequestDetailService, meta openAIWSTurnRequestDetailMeta) *openAIWSTurnRecorders {
+	if svc == nil {
+		return nil
+	}
+	connID := strings.TrimSpace(meta.ConnectionRequestID)
+	if connID == "" {
+		connID = uuid.NewString()
+	}
+	meta.ConnectionRequestID = connID
+	return &openAIWSTurnRecorders{
+		service: svc,
+		meta:    meta,
+		turns:   map[int]*openAIWSTurnRecorder{},
+	}
+}
+
+func (r *openAIWSTurnRecorders) ensure(turn int, model string) *openAIWSTurnRecorder {
+	if r == nil || turn <= 0 {
+		return nil
+	}
+	if existing := r.turns[turn]; existing != nil {
+		if existing.model == "" {
+			existing.model = strings.TrimSpace(model)
+		}
+		return existing
+	}
+	rec := &openAIWSTurnRecorder{
+		turn:      turn,
+		requestID: fmt.Sprintf("%s:turn:%d", r.meta.ConnectionRequestID, turn),
+		startedAt: time.Now(),
+		model:     strings.TrimSpace(model),
+	}
+	r.turns[turn] = rec
+	return rec
+}
+
+func (r *openAIWSTurnRecorders) recordRequest(turn int, msgType coderws.MessageType, payload []byte, model string) {
+	rec := r.ensure(turn, model)
+	if rec == nil {
+		return
+	}
+	appendOpenAIWSNDJSONFrame(&rec.requestBody, "client_to_gateway", msgType, payload)
+}
+
+func (r *openAIWSTurnRecorders) recordUpstreamRequest(turn int, msgType coderws.MessageType, payload []byte, model string) {
+	rec := r.ensure(turn, model)
+	if rec == nil {
+		return
+	}
+	upstreamModel := strings.TrimSpace(model)
+	if upstreamModel == "" {
+		upstreamModel = strings.TrimSpace(gjson.GetBytes(payload, "model").String())
+	}
+	if upstreamModel != "" {
+		rec.upstreamModel = upstreamModel
+	}
+	appendOpenAIWSNDJSONFrame(&rec.upstreamBody, "gateway_to_upstream", msgType, payload)
+}
+
+func (r *openAIWSTurnRecorders) recordDownstream(turn int, msgType coderws.MessageType, payload []byte) {
+	rec := r.ensure(turn, "")
+	if rec == nil {
+		return
+	}
+	appendOpenAIWSNDJSONFrame(&rec.responseBody, "upstream_to_client", msgType, payload)
+}
+
+func (r *openAIWSTurnRecorders) finish(turn int, result *service.OpenAIForwardResult, turnErr error) {
+	if r == nil || r.service == nil || turn <= 0 {
+		return
+	}
+	rec := r.ensure(turn, "")
+	if rec == nil {
+		return
+	}
+	delete(r.turns, turn)
+	completedAt := time.Now()
+	durationMS := int(completedAt.Sub(rec.startedAt).Milliseconds())
+	statusCode := http.StatusOK
+	errorMessage := ""
+	if turnErr != nil {
+		statusCode = http.StatusBadGateway
+		errorMessage = turnErr.Error()
+	}
+	model := strings.TrimSpace(rec.model)
+	upstreamModel := strings.TrimSpace(rec.upstreamModel)
+	responseHeaders := r.meta.ResponseHeaders
+	if result != nil {
+		if model == "" {
+			model = strings.TrimSpace(result.Model)
+		}
+		if upstreamModel == "" {
+			upstreamModel = strings.TrimSpace(result.UpstreamModel)
+		}
+		if len(result.ResponseHeaders) > 0 {
+			responseHeaders = redactOpenAIWSRequestDetailHeader(result.ResponseHeaders)
+		}
+	}
+	detail := &service.RequestDetail{
+		RequestID:           rec.requestID,
+		CreatedAt:           rec.startedAt,
+		CompletedAt:         &completedAt,
+		DurationMS:          &durationMS,
+		StatusCode:          statusCode,
+		Success:             turnErr == nil && result != nil,
+		Platform:            service.PlatformOpenAI,
+		Endpoint:            r.meta.Endpoint,
+		UpstreamEndpoint:    r.meta.UpstreamEndpoint,
+		Model:               model,
+		UpstreamModel:       upstreamModel,
+		Stream:              true,
+		UserID:              r.meta.UserID,
+		APIKeyID:            r.meta.APIKeyID,
+		AccountID:           r.meta.AccountID,
+		GroupID:             r.meta.GroupID,
+		SubscriptionID:      r.meta.SubscriptionID,
+		IPAddress:           r.meta.IPAddress,
+		UserAgent:           r.meta.UserAgent,
+		RequestHeaders:      r.meta.RequestHeaders,
+		RequestBody:         rec.requestBody.String(),
+		UpstreamRequestBody: rec.upstreamBody.String(),
+		ResponseHeaders:     responseHeaders,
+		ResponseBody:        rec.responseBody.String(),
+		ResponseTruncated:   false,
+		ErrorMessage:        errorMessage,
+	}
+	if !r.service.Enqueue(detail) {
+		logger.LegacyPrintf("handler.openai_gateway.responses_ws", "request detail queue full request_id=%s", detail.RequestID)
+	}
+}
+
+func appendOpenAIWSNDJSONFrame(buf *bytes.Buffer, direction string, msgType coderws.MessageType, payload []byte) {
+	if buf == nil {
+		return
+	}
+	eventType := ""
+	responseID := ""
+	if msgType == coderws.MessageText && len(payload) > 0 && gjson.ValidBytes(payload) {
+		values := gjson.GetManyBytes(payload, "type", "response.id", "response_id", "id")
+		eventType = strings.TrimSpace(values[0].String())
+		responseID = strings.TrimSpace(values[1].String())
+		if responseID == "" {
+			responseID = strings.TrimSpace(values[2].String())
+		}
+		if responseID == "" {
+			responseID = strings.TrimSpace(values[3].String())
+		}
+	}
+	frame := map[string]any{
+		"ts":            time.Now().Format(time.RFC3339Nano),
+		"direction":     direction,
+		"message_type":  openAIWSRequestDetailMessageType(msgType),
+		"payload_bytes": len(payload),
+		"payload":       json.RawMessage(payload),
+	}
+	if eventType != "" {
+		frame["event_type"] = eventType
+	}
+	if responseID != "" {
+		frame["response_id"] = responseID
+	}
+	encoded, err := json.Marshal(frame)
+	if err != nil {
+		fallback := map[string]any{
+			"ts":            time.Now().Format(time.RFC3339Nano),
+			"direction":     direction,
+			"message_type":  openAIWSRequestDetailMessageType(msgType),
+			"payload_bytes": len(payload),
+			"payload_text":  string(payload),
+		}
+		encoded, _ = json.Marshal(fallback)
+	}
+	if len(encoded) > 0 {
+		_, _ = buf.Write(encoded)
+		_ = buf.WriteByte('\n')
+	}
+}
+
+func openAIWSRequestDetailMessageType(msgType coderws.MessageType) string {
+	switch msgType {
+	case coderws.MessageText:
+		return "text"
+	case coderws.MessageBinary:
+		return "binary"
+	default:
+		return fmt.Sprintf("unknown(%d)", int(msgType))
+	}
+}
+
+func redactOpenAIWSRequestDetailHeader(header http.Header) map[string][]string {
+	out := make(map[string][]string, len(header))
+	for key, values := range header {
+		lower := strings.ToLower(key)
+		if lower == "authorization" || lower == "proxy-authorization" || lower == "cookie" || lower == "set-cookie" || lower == "x-api-key" {
+			out[key] = []string{"***REDACTED***"}
+			continue
+		}
+		out[key] = append([]string(nil), values...)
+	}
+	return out
 }
 
 func resolveOpenAIMessagesDispatchMappedModel(apiKey *service.APIKey, requestedModel string) string {
@@ -55,6 +292,7 @@ func NewOpenAIGatewayHandler(
 	usageRecordWorkerPool *service.UsageRecordWorkerPool,
 	errorPassthroughService *service.ErrorPassthroughService,
 	contentModerationService *service.ContentModerationService,
+	requestDetailService *service.RequestDetailService,
 	cfg *config.Config,
 ) *OpenAIGatewayHandler {
 	pingInterval := time.Duration(0)
@@ -72,6 +310,7 @@ func NewOpenAIGatewayHandler(
 		usageRecordWorkerPool:    usageRecordWorkerPool,
 		errorPassthroughService:  errorPassthroughService,
 		contentModerationService: contentModerationService,
+		requestDetailService:     requestDetailService,
 		concurrencyHelper:        NewConcurrencyHelper(concurrencyService, SSEPingFormatComment, pingInterval),
 		imageLimiter:             &imageConcurrencyLimiter{},
 		maxAccountSwitches:       maxAccountSwitches,
@@ -1335,6 +1574,34 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		zap.String("schedule_layer", scheduleDecision.Layer),
 		zap.Int("candidate_count", scheduleDecision.CandidateCount),
 	)
+	connectionRequestID, _ := c.Request.Context().Value(ctxkey.RequestID).(string)
+	if strings.TrimSpace(connectionRequestID) == "" {
+		connectionRequestID, _ = c.Request.Context().Value(ctxkey.ClientRequestID).(string)
+	}
+	if strings.TrimSpace(connectionRequestID) == "" {
+		connectionRequestID = uuid.NewString()
+	}
+	inboundEndpoint := GetInboundEndpoint(c)
+	upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+	wsTurnDetails := newOpenAIWSTurnRecorders(h.requestDetailService, openAIWSTurnRequestDetailMeta{
+		ConnectionRequestID: connectionRequestID,
+		Endpoint:            inboundEndpoint,
+		UpstreamEndpoint:    upstreamEndpoint,
+		UserID:              subject.UserID,
+		APIKeyID:            apiKey.ID,
+		AccountID:           account.ID,
+		GroupID:             apiKey.GroupID,
+		SubscriptionID: func() *int64 {
+			if subscription == nil {
+				return nil
+			}
+			return &subscription.ID
+		}(),
+		IPAddress:       clientIP,
+		UserAgent:       userAgent,
+		RequestHeaders:  redactOpenAIWSRequestDetailHeader(c.Request.Header),
+		ResponseHeaders: map[string][]string{},
+	})
 
 	hooks := &service.OpenAIWSIngressHooks{
 		InitialRequestModel: reqModel,
@@ -1390,6 +1657,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			return nil
 		},
 		AfterTurn: func(turn int, result *service.OpenAIForwardResult, turnErr error) {
+			if wsTurnDetails != nil {
+				wsTurnDetails.finish(turn, result, turnErr)
+			}
 			releaseTurnSlots()
 			if turnErr != nil {
 				if result == nil || result.ImageCount <= 0 {
@@ -1408,8 +1678,6 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				h.gatewayService.UpdateCodexUsageSnapshotFromHeaders(ctx, account.ID, result.ResponseHeaders)
 			}
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, result.FirstTokenMs)
-			inboundEndpoint := GetInboundEndpoint(c)
-			upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 			h.submitOpenAIUsageRecordTask(result, func(taskCtx context.Context) {
 				if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
 					Result:             result,
@@ -1432,6 +1700,21 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					)
 				}
 			})
+		},
+		OnTurnRequest: func(turn int, msgType coderws.MessageType, payload []byte, originalModel string) {
+			if wsTurnDetails != nil {
+				wsTurnDetails.recordRequest(turn, msgType, payload, originalModel)
+			}
+		},
+		OnTurnUpstreamRequest: func(turn int, msgType coderws.MessageType, payload []byte, originalModel string) {
+			if wsTurnDetails != nil {
+				wsTurnDetails.recordUpstreamRequest(turn, msgType, payload, originalModel)
+			}
+		},
+		OnTurnDownstreamFrame: func(turn int, msgType coderws.MessageType, payload []byte) {
+			if wsTurnDetails != nil {
+				wsTurnDetails.recordDownstream(turn, msgType, payload)
+			}
 		},
 	}
 

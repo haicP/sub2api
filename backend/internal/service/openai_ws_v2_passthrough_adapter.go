@@ -295,7 +295,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		}
 		return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, blocked.Message, blocked)
 	}
+	if hooks != nil && hooks.OnTurnRequest != nil {
+		hooks.OnTurnRequest(1, coderws.MessageText, firstClientMessage, usageMeta.requestModelForFrame(firstClientMessage))
+	}
 	firstClientMessage = updatedFirst
+	if hooks != nil && hooks.OnTurnUpstreamRequest != nil {
+		hooks.OnTurnUpstreamRequest(1, coderws.MessageText, firstClientMessage, usageMeta.requestModelForFrame(firstClientMessage))
+	}
 
 	// 在 policy filter 之后再提取 service_tier / reasoning_effort 用于
 	// usage 上报：filter
@@ -386,18 +392,22 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			if msgType != coderws.MessageText {
 				return payload, nil, nil
 			}
-			if strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create" && hooks != nil && hooks.BeforeRequest != nil {
-				turnNo := int(completedTurns.Load()) + 1
-				if turnNo < 2 {
-					turnNo = 2
-				}
-				requestModel := usageMeta.requestModelForFrame(payload)
-				if requestModel == "" {
-					requestModel = capturedSessionModel
-				}
+			turnNo := int(completedTurns.Load()) + 1
+			if turnNo < 2 {
+				turnNo = 2
+			}
+			isResponseCreateFrame := strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create"
+			requestModel := usageMeta.requestModelForFrame(payload)
+			if requestModel == "" {
+				requestModel = capturedSessionModel
+			}
+			if isResponseCreateFrame && hooks != nil && hooks.BeforeRequest != nil {
 				if err := hooks.BeforeRequest(turnNo, payload, requestModel); err != nil {
 					return payload, nil, err
 				}
+			}
+			if isResponseCreateFrame && hooks != nil && hooks.OnTurnRequest != nil {
+				hooks.OnTurnRequest(turnNo, msgType, payload, requestModel)
 			}
 			// 在评估策略前先刷新 capturedSessionModel：客户端可能通过
 			// session.update 修改 session-level model（Realtime /
@@ -438,6 +448,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			if policyErr == nil && blocked == nil &&
 				strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create" {
 				usageMeta.updateFromResponseCreate(out, requestModelForThisFrame)
+			}
+			if isResponseCreateFrame && policyErr == nil && blocked == nil && hooks != nil && hooks.OnTurnUpstreamRequest != nil {
+				upstreamModel := usageMeta.requestModelForFrame(out)
+				if upstreamModel == "" {
+					upstreamModel = requestModel
+				}
+				hooks.OnTurnUpstreamRequest(turnNo, msgType, out, upstreamModel)
 			}
 			return out, blocked, policyErr
 		},
@@ -504,6 +521,16 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				if hooks != nil && hooks.AfterTurn != nil {
 					hooks.AfterTurn(turnNo, turnResult, nil)
 				}
+			},
+			OnDownstreamFrame: func(msgType coderws.MessageType, payload []byte) {
+				if hooks == nil || hooks.OnTurnDownstreamFrame == nil {
+					return
+				}
+				turnNo := int(completedTurns.Load()) + 1
+				if turnNo < 1 {
+					turnNo = 1
+				}
+				hooks.OnTurnDownstreamFrame(turnNo, msgType, payload)
 			},
 			OnTrace: func(event openaiwsv2.RelayTraceEvent) {
 				logOpenAIWSV2Passthrough(

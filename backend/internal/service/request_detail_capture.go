@@ -528,6 +528,10 @@ func extractTextFromMixedContent(content any) string {
 
 func RequestDetailMiddleware(svc *RequestDetailService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if c != nil && c.Request != nil && strings.EqualFold(strings.TrimSpace(c.Request.Header.Get("Upgrade")), "websocket") {
+			c.Next()
+			return
+		}
 		requestID, _ := c.Request.Context().Value(ctxkey.RequestID).(string)
 		requestID = strings.TrimSpace(requestID)
 		if requestID == "" {

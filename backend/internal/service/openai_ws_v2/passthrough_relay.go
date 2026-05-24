@@ -61,6 +61,7 @@ type RelayOptions struct {
 	FirstMessageType     coderws.MessageType
 	OnUsageParseFailure  func(eventType string, usageRaw string)
 	OnTurnComplete       func(turn RelayTurnResult)
+	OnDownstreamFrame    func(msgType coderws.MessageType, payload []byte)
 	OnTrace              func(event RelayTraceEvent)
 	Now                  func() time.Time
 }
@@ -202,6 +203,7 @@ func Relay(
 		state,
 		options.OnUsageParseFailure,
 		options.OnTurnComplete,
+		options.OnDownstreamFrame,
 		&dropDownstreamWrites,
 		upstreamToClientFrames,
 		droppedDownstreamFrames,
@@ -368,6 +370,7 @@ func runUpstreamToClient(
 	state *relayState,
 	onUsageParseFailure func(eventType string, usageRaw string),
 	onTurnComplete func(turn RelayTurnResult),
+	onDownstreamFrame func(msgType coderws.MessageType, payload []byte),
 	dropDownstreamWrites *atomic.Bool,
 	forwardedFrames *atomic.Int64,
 	droppedFrames *atomic.Int64,
@@ -401,6 +404,9 @@ func runUpstreamToClient(
 			observedEvent = observeUpstreamMessage(state, payload, startAt, nowFn, onUsageParseFailure)
 		case coderws.MessageBinary:
 			// binary frame 直接透传，不进入 JSON 观测路径（避免无效解析开销）。
+		}
+		if onDownstreamFrame != nil {
+			onDownstreamFrame(msgType, payload)
 		}
 		emitTurnComplete(onTurnComplete, state, observedEvent)
 		if dropDownstreamWrites != nil && dropDownstreamWrites.Load() {
