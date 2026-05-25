@@ -196,6 +196,7 @@ func (r *openAIWSTurnRecorders) finish(turn int, result *service.OpenAIForwardRe
 		RequestBody:         rec.requestBody.String(),
 		UpstreamRequestBody: rec.upstreamBody.String(),
 		ResponseHeaders:     responseHeaders,
+		ResponseContent:     service.ExtractRequestDetailResponseContent(service.RequestDetailContext{Platform: service.PlatformOpenAI}, rec.responseBody.String()),
 		ResponseBody:        rec.responseBody.String(),
 		ResponseTruncated:   false,
 		ErrorMessage:        errorMessage,

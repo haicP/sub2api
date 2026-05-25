@@ -282,6 +282,12 @@ func ExtractRequestDetailResponseContent(ctx RequestDetailContext, responseBody 
 }
 
 func extractOpenAIResponseContent(body string) string {
+	if strings.Contains(body, `"direction":"upstream_to_client"`) || strings.Contains(body, `"payload"`) {
+		if text := extractOpenAIResponseContentFromWSNDJSON(body); text != "" {
+			return text
+		}
+	}
+
 	if strings.Contains(body, "data:") {
 		if text := extractChatCompletionsContentFromSSE(body); text != "" {
 			return text
@@ -303,6 +309,77 @@ func extractOpenAIResponseContent(body string) string {
 		return extractTextFromOpenAIOutputJSON([]byte(output.Raw))
 	}
 	if choices := gjson.Get(trimmed, "choices"); choices.Exists() {
+		return extractTextFromChatChoicesJSON([]byte(choices.Raw))
+	}
+	return ""
+}
+
+func extractOpenAIResponseContentFromWSNDJSON(body string) string {
+	var deltas []string
+	var fallback string
+	lines := strings.Split(body, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || !gjson.Valid(trimmed) {
+			continue
+		}
+		payload := gjson.Get(trimmed, "payload")
+		if !payload.Exists() || !payload.IsObject() {
+			continue
+		}
+		payloadRaw := []byte(payload.Raw)
+		switch payload.Get("type").String() {
+		case "response.output_text.delta":
+			if text := payload.Get("delta").String(); text != "" {
+				deltas = append(deltas, text)
+			}
+		case "response.output_item.done":
+			item := payload.Get("item")
+			if !item.Exists() || !item.IsObject() || item.Get("type").String() != "function_call" {
+				continue
+			}
+			var raw map[string]any
+			if err := json.Unmarshal([]byte(item.Raw), &raw); err != nil {
+				continue
+			}
+			if text := extractTextFromOpenAIFunctionCall(raw); text != "" {
+				deltas = append(deltas, text)
+			}
+		case "response.completed":
+			response := payload.Get("response")
+			if !response.Exists() || !response.IsObject() {
+				continue
+			}
+			if text := strings.TrimSpace(response.Get("output_text").String()); text != "" {
+				fallback = text
+				continue
+			}
+			if output := response.Get("output"); output.Exists() {
+				if text := extractTextFromOpenAIOutputJSON([]byte(output.Raw)); text != "" {
+					fallback = text
+				}
+			}
+		}
+		if len(deltas) == 0 && fallback == "" {
+			if text := extractOpenAIResponseContentFromJSONPayload(payloadRaw); text != "" {
+				fallback = text
+			}
+		}
+	}
+	if len(deltas) > 0 {
+		return strings.Join(deltas, "")
+	}
+	return fallback
+}
+
+func extractOpenAIResponseContentFromJSONPayload(payload []byte) string {
+	if len(payload) == 0 || !gjson.ValidBytes(payload) {
+		return ""
+	}
+	if output := gjson.GetBytes(payload, "output"); output.Exists() {
+		return extractTextFromOpenAIOutputJSON([]byte(output.Raw))
+	}
+	if choices := gjson.GetBytes(payload, "choices"); choices.Exists() {
 		return extractTextFromChatChoicesJSON([]byte(choices.Raw))
 	}
 	return ""

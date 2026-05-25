@@ -220,6 +220,20 @@ func TestExtractResponseContent(t *testing.T) {
 		require.Equal(t, "Hello world", got)
 	})
 
+	t.Run("openai responses websocket ndjson deltas", func(t *testing.T) {
+		body := `{"direction":"upstream_to_client","message_type":"text","event_type":"response.output_text.delta","payload":{"type":"response.output_text.delta","delta":"Hello"}}` + "\n" +
+			`{"direction":"upstream_to_client","message_type":"text","event_type":"response.output_text.delta","payload":{"type":"response.output_text.delta","delta":" world"}}` + "\n" +
+			`{"direction":"upstream_to_client","message_type":"text","event_type":"response.completed","payload":{"type":"response.completed","response":{"id":"resp_1","output_text":"Hello world"}}}` + "\n"
+		got := extractResponseContent(RequestDetailContext{Platform: PlatformOpenAI}, body)
+		require.Equal(t, "Hello world", got)
+	})
+
+	t.Run("openai responses websocket ndjson completed output", func(t *testing.T) {
+		body := `{"direction":"upstream_to_client","message_type":"text","event_type":"response.completed","payload":{"type":"response.completed","response":{"id":"resp_1","output_text":"ok"}}}` + "\n"
+		got := extractResponseContent(RequestDetailContext{Platform: PlatformOpenAI}, body)
+		require.Equal(t, "ok", got)
+	})
+
 	t.Run("openai responses function call sse", func(t *testing.T) {
 		body := "event: response.output_item.done\n" +
 			"data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_1\",\"type\":\"function_call\",\"status\":\"completed\",\"name\":\"write_stdin\",\"arguments\":\"{\\\"session_id\\\":21762,\\\"chars\\\":\\\"\\\"}\"},\"output_index\":0}\n\n"

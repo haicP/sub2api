@@ -108,4 +108,5 @@ func TestOpenAIWSTurnRecordersCreatePerTurnRequestDetail(t *testing.T) {
 	require.Contains(t, detail.UpstreamRequestBody, `"direction":"gateway_to_upstream"`)
 	require.Contains(t, detail.ResponseBody, `"direction":"upstream_to_client"`)
 	require.Contains(t, detail.ResponseBody, `"response_id":"resp_1"`)
+	require.Equal(t, "ok", detail.ResponseContent)
 }
